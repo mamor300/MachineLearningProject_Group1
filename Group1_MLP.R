@@ -99,5 +99,3 @@ wait <- CFPB2[,"Wait.time"] %>%
   rename(Time = Wait.time)
 summary(na.omit(CFPB2$Wait.time==0)) # 55,000+ zero wait times
 hist(wait$Time,breaks = 50,right = FALSE)
-
-write_csv(ZIPCODES,"zipcodes.csv")
