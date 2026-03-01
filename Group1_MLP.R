@@ -32,6 +32,8 @@ CFPB1 <-CFPB0 %>%
 set.seed(03012026)
 RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB1$ZIP.code),replace = TRUE),5,"left",pad="0")
 
+zip_check <- CFPB1[is.na(CFPB1$ZIP.code) | nchar(CFPB1$ZIP.code) < 5, ]#"ZIP.code", drop = FALSE] < this will give only the zip code row
+
 # Matt recommends
 CFPB <- CFPB1 %>%
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
@@ -93,9 +95,9 @@ unique(CFPB0$Complaint.ID)
 
 # Added Variable
 ## Wait time (in days) could be helpful but values are heavily skewed to 0 and 1
-wait <- CFPB2[,"Wait.time"] %>%
+wait <- CFPB[,"Wait.time"] %>%
   filter(Wait.time <= 50,
          Wait.time >  0)%>%
   rename(Time = Wait.time)
-summary(na.omit(CFPB2$Wait.time==0)) # 55,000+ zero wait times
+summary(na.omit(CFPB$Wait.time==0)) # 55,000+ zero wait times
 hist(wait$Time,breaks = 50,right = FALSE)
