@@ -7,6 +7,11 @@ library(tidyverse)
 CFPB0 <- read_csv("sample26.01.csv")
 ZIPCODES <- read_csv("zip_fips.csv")
 
+# Recoding ZIP and FIPS
+ZIPCODES <- ZIPCODES %>%
+  mutate(FIPS = str_pad(STCOUNTYFP,5,"left",pad="0"),
+         ZIP  = str_pad(ZIP,5,"left",pad="0"))
+
 ## recode target variable
 CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in% 
                      c("Closed with monetary relief",
@@ -20,7 +25,12 @@ CFPB0 <- CFPB0[,-c(1)]%>%
 ## 134 rows have NA values across 12 variables in original data
 CFPB1 <-CFPB0 %>%
   drop_na(Date.sent.to.company)%>%
-  filter(!State %in% c("NONE", "None", "DC", "AA", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
+  filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
+
+# Assigning Random Zip Codes
+## Placeholder step for section 2 until we learn how to handle missing data.
+set.seed(03012026)
+RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB1$ZIP.code),replace = TRUE),5,"left",pad="0")
 
 # Matt recommends
 CFPB <- CFPB1 %>%
@@ -31,12 +41,17 @@ CFPB <- CFPB1 %>%
          Company.public.response      = as.factor(Company.public.response),
          Company                      = as.factor(Company),
          State                        = as.factor(State),
-         ZIP.code                     = as.factor(ZIP.code),
+         ZIP.code                     = as.factor(ZIP.code),         
+         ZIP                          = as.factor(RandomZip),
          Tags                         = as.factor(Tags),
          Consumer.consent.provided.   = as.factor(Consumer.consent.provided.),
          Submitted.via                = as.factor(Submitted.via),
          Company.response.to.consumer = as.factor(Company.response.to.consumer),
          Timely.response.             = as.factor(Timely.response.))%>%
+  left_join(ZIPCODES %>% select(ZIP, FIPS), by = "ZIP")%>%
+  relocate(ZIP,.after = ZIP.code)%>%
+  relocate(FIPS,.after = ZIP) %>%
+  mutate(FIPS = as.factor(FIPS))%>%
   rename(Received      = Date.received,
          Sent          = Date.sent.to.company,
          Cust.response = Company.response.to.consumer,
@@ -51,14 +66,6 @@ CFPB <- CFPB1 %>%
          -Complaint.ID)%>%
   select(Relief, Received, Sent, Wait.time,everything())
 
-# Assigning Random Zip Codes
-## Placeholder step for section 2 until we learn how to handle missing data.
-set.seed(03012026)
-RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB$ZIP.code),replace = TRUE),5,"left",pad="0")
-CFPB <- CFPB %>%
-  mutate(ZIP = RandomZip)%>%
-  relocate(ZIP,.after = ZIP.code)
-
 # Below is just to show you why I ended up with CFPB. This will be removed from final code.
 
 # This gives a good idea about the challenges with the data
@@ -69,6 +76,11 @@ summary(CFPB)
 FACT_CFPB <- sapply(CFPB,is.factor)
 fact_CFPB <- CFPB[,FACT_CFPB]
 lapply(fact_CFPB,unique)
+result <- data.frame(
+  column_name  = names(fact_CFPB),
+  level_counts = sapply(fact_CFPB, function(x) nlevels(x))
+)
+sum(result$level_counts) # we have 10,000+ factor levels
 
 # Dropped the following variables
 ## No Variation
@@ -88,3 +100,4 @@ wait <- CFPB2[,"Wait.time"] %>%
 summary(na.omit(CFPB2$Wait.time==0)) # 55,000+ zero wait times
 hist(wait$Time,breaks = 50,right = FALSE)
 
+write_csv(ZIPCODES,"zipcodes.csv")
