@@ -5,6 +5,7 @@ library(readr)
 library(tidyverse)
 
 CFPB0 <- read_csv("sample26.01.csv")
+ZIPCODES <- read_csv("zip_fips.csv")
 
 ## recode target variable
 CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in% 
@@ -18,7 +19,8 @@ CFPB0 <- CFPB0[,-c(1)]%>%
 # Dropping NAs
 ## 134 rows have NA values across 12 variables in original data
 CFPB1 <-CFPB0 %>%
-  drop_na(Date.sent.to.company)
+  drop_na(Date.sent.to.company)%>%
+  filter(!State %in% c("NONE", "None", "DC", "AA", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
 
 # Matt recommends
 CFPB <- CFPB1 %>%
@@ -48,6 +50,14 @@ CFPB <- CFPB1 %>%
          -Consumer.complaint.narrative,
          -Complaint.ID)%>%
   select(Relief, Received, Sent, Wait.time,everything())
+
+# Assigning Random Zip Codes
+## Placeholder step for section 2 until we learn how to handle missing data.
+set.seed(03012026)
+RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB$ZIP.code),replace = TRUE),5,"left",pad="0")
+CFPB <- CFPB %>%
+  mutate(ZIP = RandomZip)%>%
+  relocate(ZIP,.after = ZIP.code)
 
 # Below is just to show you why I ended up with CFPB. This will be removed from final code.
 
