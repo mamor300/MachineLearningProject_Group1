@@ -32,8 +32,6 @@ CFPB1 <-CFPB0 %>%
 set.seed(03012026)
 RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB1$ZIP.code),replace = TRUE),5,"left",pad="0")
 
-zip_check <- CFPB1[is.na(CFPB1$ZIP.code) | nchar(CFPB1$ZIP.code) < 5, ]#"ZIP.code", drop = FALSE] < this will give only the zip code row
-
 # Matt recommends
 CFPB <- CFPB1 %>%
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
@@ -43,6 +41,7 @@ CFPB <- CFPB1 %>%
          Company.public.response      = as.factor(Company.public.response),
          Company                      = as.factor(Company),
          State                        = as.factor(State),
+         ZIP.missing                  = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
          ZIP.code                     = as.factor(ZIP.code),         
          ZIP                          = as.factor(RandomZip),
          Tags                         = as.factor(Tags),
@@ -51,8 +50,7 @@ CFPB <- CFPB1 %>%
          Company.response.to.consumer = as.factor(Company.response.to.consumer),
          Timely.response.             = as.factor(Timely.response.))%>%
   left_join(ZIPCODES %>% select(ZIP, FIPS), by = "ZIP")%>%
-  relocate(ZIP,.after = ZIP.code)%>%
-  relocate(FIPS,.after = ZIP) %>%
+  relocate(c(ZIP.missing,FIPS,ZIP),.after = ZIP.code)%>%
   mutate(FIPS = as.factor(FIPS))%>%
   rename(Received      = Date.received,
          Sent          = Date.sent.to.company,
@@ -70,6 +68,11 @@ CFPB <- CFPB1 %>%
 
 # Below is just to show you why I ended up with CFPB. This will be removed from final code.
 
+#2.
+## ZIP.code needs to be modified to impute missing values
+## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
+summary(CFPB$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
+
 # This gives a good idea about the challenges with the data
 ## There are a lot of factor levels, particularly under Company and Zip.codes
 ## Zip codes have lots of missing values
@@ -80,9 +83,8 @@ fact_CFPB <- CFPB[,FACT_CFPB]
 lapply(fact_CFPB,unique)
 result <- data.frame(
   column_name  = names(fact_CFPB),
-  level_counts = sapply(fact_CFPB, function(x) nlevels(x))
-)
-sum(result$level_counts) # we have 10,000+ factor levels
+  level_counts = sapply(fact_CFPB, function(x) nlevels(x)))
+sum(result$level_counts) # we have 13,000+ factor levels
 
 # Dropped the following variables
 ## No Variation
