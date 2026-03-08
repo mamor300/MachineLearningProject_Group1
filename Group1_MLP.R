@@ -2,6 +2,7 @@ setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 -
 rm(list=ls())
 
 library(readr)
+library(readxl)
 library(tidyverse)
 
 CFPB0 <- read_csv("sample26.01.csv")
@@ -108,34 +109,3 @@ CFPB.debt <- CFPB %>%
   left_join(DebtMetrics %>%
               select(-`State Name`),
             by="FIPS")
-
-# This gives a good idea about the challenges with the data
-## There are a lot of factor levels, particularly under Company and Zip.codes
-## Zip codes have lots of missing values
-## Nearly all variables have NA factor levels
-summary(CFPB)
-FACT_CFPB <- sapply(CFPB,is.factor)
-fact_CFPB <- CFPB[,FACT_CFPB]
-lapply(fact_CFPB,unique)
-result <- data.frame(
-  column_name  = names(fact_CFPB),
-  level_counts = sapply(fact_CFPB, function(x) nlevels(x)))
-sum(result$level_counts) # we have 13,000+ factor levels
-
-# Dropped the following variables
-## No Variation
-unique(CFPB0$Product)
-unique(CFPB0$Sub.product)
-unique(CFPB0$Consumer.disputed.)
-## Too Much Variation
-unique(CFPB0$Consumer.complaint.narrative)
-unique(CFPB0$Complaint.ID)
-
-# Added Variable
-## Wait time (in days) could be helpful but values are heavily skewed to 0 and 1
-wait <- CFPB[,"Wait.time"] %>%
-  filter(Wait.time <= 50,
-         Wait.time >  0)%>%
-  rename(Time = Wait.time)
-summary(na.omit(CFPB$Wait.time==0)) # 55,000+ zero wait times
-hist(wait$Time,breaks = 50,right = FALSE)
