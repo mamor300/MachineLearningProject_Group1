@@ -73,6 +73,42 @@ CFPB <- CFPB1 %>%
 ## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
 summary(CFPB$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
 
+
+#6.
+AutoRetail <- read_xlsx("Question6/AutoRetail.xlsx")
+StudentLoan <- read_xlsx("Question6/StudentLoan.xlsx")
+OverallDebt <- read_xlsx("Question6/Overall.xlsx")
+
+DebtMetrics <- OverallDebt %>%
+  left_join(AutoRetail %>% 
+              select(-`County Name`,
+                     -`State Name`,
+                     -`Auto/retail loan delinquency rate, All`,
+                     -`Auto/retail loan delinquency rate, Comm of color`,
+                     -`Auto/retail loan delinquency rate, White comm`,
+                     -`Share of people of color`,
+                     -`Average household income, All`,
+                     -`Average household income, White comm`,
+                     -`Average household income, Comm of color`),
+            by = "County FIPS") %>%
+  left_join(StudentLoan %>% 
+              select(-`County Name`,
+                     -`State Name`,
+                     -`Share of people of color`,
+                     -`Average household income, All`,
+                     -`Average household income, White comm`,
+                     -`Average household income, Comm of color`,
+                     -`Student loan delinquency rate (60+), All`,
+                     -`Student loan delinquency rate (60+), Comm of color`,
+                     -`Student loan delinquency rate (60+), White comm`),
+            by = "County FIPS")%>%
+  rename(FIPS = `County FIPS`)
+
+CFPB.debt <- CFPB %>%
+  left_join(DebtMetrics %>%
+              select(-`State Name`),
+            by="FIPS")
+
 # This gives a good idea about the challenges with the data
 ## There are a lot of factor levels, particularly under Company and Zip.codes
 ## Zip codes have lots of missing values
