@@ -13,7 +13,7 @@ ZIPCODES <- ZIPCODES %>%
   mutate(FIPS = str_pad(STCOUNTYFP,5,"left",pad="0"),
          ZIP  = str_pad(ZIP,5,"left",pad="0"))
 
-## recode target variable
+# Recoding Response Variable
 CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in% 
                      c("Closed with monetary relief",
                        "Closed with relief",
@@ -22,8 +22,9 @@ CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in%
 CFPB0 <- CFPB0[,-c(1)]%>%
   select(Relief,Date.received, Date.sent.to.company,everything())
 
-# Dropping NAs
-## 134 rows have NA values across 12 variables in original data
+# Dropping Observations
+## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
+## Dropping observations not in the 50 states
 CFPB1 <-CFPB0 %>%
   drop_na(Date.sent.to.company)%>%
   filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
@@ -33,10 +34,17 @@ CFPB1 <-CFPB0 %>%
 set.seed(03012026)
 RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB1$ZIP.code),replace = TRUE),5,"left",pad="0")
 
-# Matt recommends
-CFPB <- CFPB1 %>%
+#2.
+## ZIP.code needs to be modified to impute missing values
+## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
+summary(CFPB$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
+
+#3.
+## First major cleaning of CFPB data
+CFPB2 <- CFPB1 %>%
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
+         Year                         = year(Date.received),
          Issue                        = as.factor(Issue),
          Sub.issue                    = as.factor(Sub.issue),
          Company.public.response      = as.factor(Company.public.response),
@@ -63,23 +71,15 @@ CFPB <- CFPB1 %>%
   select(-Product,
          -Sub.product,
          -Consumer.disputed.,
-         -Consumer.complaint.narrative,
-         -Complaint.ID)%>%
-  select(Relief, Received, Sent, Wait.time,everything())
-
-# Below is just to show you why I ended up with CFPB. This will be removed from final code.
-
-#2.
-## ZIP.code needs to be modified to impute missing values
-## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
-summary(CFPB$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
-
+         -Consumer.complaint.narrative)%>%
+  select(Relief, Received, Sent, Year, Wait.time,everything())
+rm(RandomZip,CFPB1,CFPB0)
 
 #6.
 AutoRetail <- read_xlsx("Question6/AutoRetail.xlsx")
 StudentLoan <- read_xlsx("Question6/StudentLoan.xlsx")
 OverallDebt <- read_xlsx("Question6/Overall.xlsx")
-
+# Combining all debt data
 DebtMetrics <- OverallDebt %>%
   left_join(AutoRetail %>% 
               select(-`County Name`,
@@ -104,8 +104,42 @@ DebtMetrics <- OverallDebt %>%
                      -`Student loan delinquency rate (60+), White comm`),
             by = "County FIPS")%>%
   rename(FIPS = `County FIPS`)
-
-CFPB.debt <- CFPB %>%
+# Joining CFPB and Debt data for inspection
+CFPB.debt <- CFPB2 %>%
   left_join(DebtMetrics %>%
               select(-`State Name`),
-            by="FIPS")
+            by ="FIPS")
+rm(CFPB.debt,AutoRetail,OverallDebt,StudentLoan)
+
+#7.
+INSECURE0 <- read_xlsx("credit-insecurity-index-data-workbook.xlsx", sheet = "County")
+INSECURE <- INSECURE0 %>%
+  pivot_longer(cols = "2018":"2023",
+               names_to = "Year",
+               values_to = "value") %>%
+  mutate(Year = as.integer(Year))%>%
+  pivot_wider(names_from = `Credit Insecurity Measure`,
+              values_from = value)%>%
+  rename(FIPS = GEOID)
+# Joining credit insecurity data with CFPB
+## The only years of overlap are 2022 and 2023. This filters everything else out
+CFPB.insecurity <- CFPB2 %>%
+  left_join(INSECURE %>%
+              select(-`County Name`,
+                     -State),
+            by = c("FIPS","Year"))%>%
+  filter(Year %in% c("2018":"2023"))
+rm(CFPB.insecurity,INSECURE0)
+
+# Joining Debt and Credit Insecurity datasets to CFPB
+## Previous CFPB data frame and references to it are changed to CFPB2 
+CFPB <- CFPB2 %>%
+  left_join(INSECURE %>%
+              select(-`County Name`,
+                     -State),
+            by = c("FIPS","Year"))%>%
+  left_join(DebtMetrics %>%
+              select(-`State Name`),
+            by ="FIPS")
+rm(INSECURE, DebtMetrics)
+
