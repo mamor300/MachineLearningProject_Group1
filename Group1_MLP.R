@@ -34,11 +34,6 @@ CFPB1 <-CFPB0 %>%
 set.seed(03012026)
 RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB1$ZIP.code),replace = TRUE),5,"left",pad="0")
 
-#2.
-## ZIP.code needs to be modified to impute missing values
-## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
-summary(CFPB$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
-
 #3.
 ## First major cleaning of CFPB data
 CFPB2 <- CFPB1 %>%
@@ -51,7 +46,7 @@ CFPB2 <- CFPB1 %>%
          Company                      = as.factor(Company),
          State                        = as.factor(State),
          ZIP.missing                  = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
-         ZIP.code                     = as.factor(ZIP.code),         
+         ZIP.code                     = as.character(ZIP.code),         
          ZIP                          = as.factor(RandomZip),
          Tags                         = as.factor(Tags),
          Consumer.consent.provided.   = as.factor(Consumer.consent.provided.),
@@ -73,8 +68,28 @@ CFPB2 <- CFPB1 %>%
          -Consumer.disputed.,
          -Consumer.complaint.narrative)%>%
   select(Relief, Received, Sent, Year, Wait.time,everything())
-rm(RandomZip,CFPB1,CFPB0)
 
+#2.
+## ZIP.code needs to be modified to impute missing values
+## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
+summary(CFPB2$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
+
+# imputing zip codes with means
+## each missing value uses the average among the first 3 digits of non-missing "siblings"
+## this produces 95 NAs for zip codes that do not have any non-missing siblings
+df <- CFPB2 %>%
+  mutate(
+    zip_char = as.character(ZIP.code),
+    prefix3  = substr(zip_char, 1, 3))
+ZIP.means <- df %>%
+  filter(ZIP.missing == 0, nchar(trimws(zip_char)) == 5) %>%
+  group_by(prefix3) %>%
+  summarise(mean_zip = formatC(round(mean(as.numeric(zip_char), na.rm = TRUE)), 
+                               width = 5, flag = "0", format = "d")) %>%
+  mutate(mean_zip = as.factor(mean_zip))
+df <- df %>%
+  left_join(ZIP.means, by = "prefix3") %>%
+  mutate(ZIP.Imputed = as.factor(ifelse(ZIP.missing == 1, as.character(mean_zip), zip_char)))
 #6.
 AutoRetail <- read_xlsx("Question6/AutoRetail.xlsx")
 StudentLoan <- read_xlsx("Question6/StudentLoan.xlsx")
