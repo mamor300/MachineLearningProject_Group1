@@ -2,6 +2,7 @@ setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 -
 rm(list=ls())
 
 library(readr)
+library(readxl)
 library(tidyverse)
 
 CFPB0 <- read_csv("sample26.01.csv")
@@ -12,7 +13,7 @@ ZIPCODES <- ZIPCODES %>%
   mutate(FIPS = str_pad(STCOUNTYFP,5,"left",pad="0"),
          ZIP  = str_pad(ZIP,5,"left",pad="0"))
 
-## recode target variable
+# Recoding Response Variable
 CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in% 
                      c("Closed with monetary relief",
                        "Closed with relief",
@@ -21,8 +22,9 @@ CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in%
 CFPB0 <- CFPB0[,-c(1)]%>%
   select(Relief,Date.received, Date.sent.to.company,everything())
 
-# Dropping NAs
-## 134 rows have NA values across 12 variables in original data
+# Dropping Observations
+## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
+## Dropping observations not in the 50 states
 CFPB1 <-CFPB0 %>%
   drop_na(Date.sent.to.company)%>%
   filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
@@ -32,17 +34,19 @@ CFPB1 <-CFPB0 %>%
 set.seed(03012026)
 RandomZip <- str_pad(sample(ZIPCODES$ZIP,length(CFPB1$ZIP.code),replace = TRUE),5,"left",pad="0")
 
-# Matt recommends
-CFPB <- CFPB1 %>%
+#3.
+## First major cleaning of CFPB data
+CFPB2 <- CFPB1 %>%
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
+         Year                         = year(Date.received),
          Issue                        = as.factor(Issue),
          Sub.issue                    = as.factor(Sub.issue),
          Company.public.response      = as.factor(Company.public.response),
          Company                      = as.factor(Company),
          State                        = as.factor(State),
          ZIP.missing                  = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
-         ZIP.code                     = as.factor(ZIP.code),         
+         ZIP.code                     = as.character(ZIP.code),         
          ZIP                          = as.factor(RandomZip),
          Tags                         = as.factor(Tags),
          Consumer.consent.provided.   = as.factor(Consumer.consent.provided.),
@@ -62,44 +66,95 @@ CFPB <- CFPB1 %>%
   select(-Product,
          -Sub.product,
          -Consumer.disputed.,
-         -Consumer.complaint.narrative,
-         -Complaint.ID)%>%
-  select(Relief, Received, Sent, Wait.time,everything())
-
-# Below is just to show you why I ended up with CFPB. This will be removed from final code.
+         -Consumer.complaint.narrative)%>%
+  select(Relief, Received, Sent, Year, Wait.time,everything())
 
 #2.
 ## ZIP.code needs to be modified to impute missing values
 ## ZIP.missing is a binary variable where 1 is an incomplete ZIP, and 0 is complete
-summary(CFPB$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
+summary(CFPB2$ZIP.missing) # Mean is 0.1159, so 11.6% of the zip codes are incomplete.
 
-# This gives a good idea about the challenges with the data
-## There are a lot of factor levels, particularly under Company and Zip.codes
-## Zip codes have lots of missing values
-## Nearly all variables have NA factor levels
-summary(CFPB)
-FACT_CFPB <- sapply(CFPB,is.factor)
-fact_CFPB <- CFPB[,FACT_CFPB]
-lapply(fact_CFPB,unique)
-result <- data.frame(
-  column_name  = names(fact_CFPB),
-  level_counts = sapply(fact_CFPB, function(x) nlevels(x)))
-sum(result$level_counts) # we have 13,000+ factor levels
+# imputing zip codes with means
+## each missing value uses the average among the first 3 digits of non-missing "siblings"
+## this produces 95 NAs for zip codes that do not have any non-missing siblings
+df <- CFPB2 %>%
+  mutate(
+    zip_char = as.character(ZIP.code),
+    prefix3  = substr(zip_char, 1, 3))
+ZIP.means <- df %>%
+  filter(ZIP.missing == 0, nchar(trimws(zip_char)) == 5) %>%
+  group_by(prefix3) %>%
+  summarise(mean_zip = formatC(round(mean(as.numeric(zip_char), na.rm = TRUE)), 
+                               width = 5, flag = "0", format = "d")) %>%
+  mutate(mean_zip = as.factor(mean_zip))
+df <- df %>%
+  left_join(ZIP.means, by = "prefix3") %>%
+  mutate(ZIP.Imputed = as.factor(ifelse(ZIP.missing == 1, as.character(mean_zip), zip_char)))
+#6.
+AutoRetail <- read_xlsx("Question6/AutoRetail.xlsx")
+StudentLoan <- read_xlsx("Question6/StudentLoan.xlsx")
+OverallDebt <- read_xlsx("Question6/Overall.xlsx")
+# Combining all debt data
+DebtMetrics <- OverallDebt %>%
+  left_join(AutoRetail %>% 
+              select(-`County Name`,
+                     -`State Name`,
+                     -`Auto/retail loan delinquency rate, All`,
+                     -`Auto/retail loan delinquency rate, Comm of color`,
+                     -`Auto/retail loan delinquency rate, White comm`,
+                     -`Share of people of color`,
+                     -`Average household income, All`,
+                     -`Average household income, White comm`,
+                     -`Average household income, Comm of color`),
+            by = "County FIPS") %>%
+  left_join(StudentLoan %>% 
+              select(-`County Name`,
+                     -`State Name`,
+                     -`Share of people of color`,
+                     -`Average household income, All`,
+                     -`Average household income, White comm`,
+                     -`Average household income, Comm of color`,
+                     -`Student loan delinquency rate (60+), All`,
+                     -`Student loan delinquency rate (60+), Comm of color`,
+                     -`Student loan delinquency rate (60+), White comm`),
+            by = "County FIPS")%>%
+  rename(FIPS = `County FIPS`)
+# Joining CFPB and Debt data for inspection
+CFPB.debt <- CFPB2 %>%
+  left_join(DebtMetrics %>%
+              select(-`State Name`),
+            by ="FIPS")
+rm(CFPB.debt,AutoRetail,OverallDebt,StudentLoan)
 
-# Dropped the following variables
-## No Variation
-unique(CFPB0$Product)
-unique(CFPB0$Sub.product)
-unique(CFPB0$Consumer.disputed.)
-## Too Much Variation
-unique(CFPB0$Consumer.complaint.narrative)
-unique(CFPB0$Complaint.ID)
+#7.
+INSECURE0 <- read_xlsx("credit-insecurity-index-data-workbook.xlsx", sheet = "County")
+INSECURE <- INSECURE0 %>%
+  pivot_longer(cols = "2018":"2023",
+               names_to = "Year",
+               values_to = "value") %>%
+  mutate(Year = as.integer(Year))%>%
+  pivot_wider(names_from = `Credit Insecurity Measure`,
+              values_from = value)%>%
+  rename(FIPS = GEOID)
+# Joining credit insecurity data with CFPB
+## The only years of overlap are 2022 and 2023. This filters everything else out
+CFPB.insecurity <- CFPB2 %>%
+  left_join(INSECURE %>%
+              select(-`County Name`,
+                     -State),
+            by = c("FIPS","Year"))%>%
+  filter(Year %in% c("2018":"2023"))
+rm(CFPB.insecurity,INSECURE0)
 
-# Added Variable
-## Wait time (in days) could be helpful but values are heavily skewed to 0 and 1
-wait <- CFPB[,"Wait.time"] %>%
-  filter(Wait.time <= 50,
-         Wait.time >  0)%>%
-  rename(Time = Wait.time)
-summary(na.omit(CFPB$Wait.time==0)) # 55,000+ zero wait times
-hist(wait$Time,breaks = 50,right = FALSE)
+# Joining Debt and Credit Insecurity datasets to CFPB
+## Previous CFPB data frame and references to it are changed to CFPB2 
+CFPB <- CFPB2 %>%
+  left_join(INSECURE %>%
+              select(-`County Name`,
+                     -State),
+            by = c("FIPS","Year"))%>%
+  left_join(DebtMetrics %>%
+              select(-`State Name`),
+            by ="FIPS")
+rm(INSECURE, DebtMetrics)
+
