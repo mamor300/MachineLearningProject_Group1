@@ -122,9 +122,9 @@ CFPB3 <- CFPB2 %>%
 # summary(!complete.cases(CFPB3))
 
 #6.
-AutoRetail <- read_xlsx("Question6/AutoRetail.xlsx")
-StudentLoan <- read_xlsx("Question6/StudentLoan.xlsx")
-OverallDebt <- read_xlsx("Question6/Overall.xlsx")
+AutoRetail <- read_xlsx("Question06/AutoRetail.xlsx")
+StudentLoan <- read_xlsx("Question06/StudentLoan.xlsx")
+OverallDebt <- read_xlsx("Question06/Overall.xlsx")
 # Combining all debt data
 DebtMetrics <- OverallDebt %>%
   left_join(AutoRetail %>% 
@@ -186,15 +186,71 @@ CFPB <- CFPB3 %>%
             by = c("FIPS","Year"))%>%
   left_join(DebtMetrics %>%
               dplyr::select(-`State Name`),
-            by ="FIPS")
+            by ="FIPS") %>%
+  dplyr::select(-ZIP.missing)
 #rm(INSECURE, DebtMetrics,CFPB2,CFPB3)
 
 #8
+# Importing, cleaning, combining fair market rent data from 
 FMR22 <- read_xlsx("Question08/FY22_FMRs_revised.xlsx")%>%
-  rename(fips = fips2010)
-FMR23 <- read_xlsx("Question08/FY23_FMRs_revised.xlsx")
-FMR24 <- read_xlsx("Question08/FMR2024_final_revised.xlsx")
-FMR25 <- read_xlsx("Question08/FY25_FMRs_revised.xlsx")
+  rename(fips = fips2010,
+         "Studio_2022"    = fmr_0,
+         "OneRoom_2022"   = fmr_1,
+         "TwoRoom_2022"   = fmr_2,
+         "ThreeRoom_2022" = fmr_3,
+         "FourRoom_2022"  = fmr_4)
+FMR23 <- read_xlsx("Question08/FY23_FMRs_revised.xlsx") %>%
+  rename("Studio_2023"    = fmr_0,
+         "OneRoom_2023"   = fmr_1,
+         "TwoRoom_2023"   = fmr_2,
+         "ThreeRoom_2023" = fmr_3,
+         "FourRoom_2023"  = fmr_4)
+FMR24 <- read_xlsx("Question08/FMR2024_final_revised.xlsx") %>%
+  rename("Studio_2024"    = fmr_0,
+         "OneRoom_2024"   = fmr_1,
+         "TwoRoom_2024"   = fmr_2,
+         "ThreeRoom_2024" = fmr_3,
+         "FourRoom_2024"  = fmr_4)
+FMR25 <- read_xlsx("Question08/FY25_FMRs_revised.xlsx")%>%
+  rename("Studio_2025"    = fmr_0,
+         "OneRoom_2025"   = fmr_1,
+         "TwoRoom_2025"   = fmr_2,
+         "ThreeRoom_2025" = fmr_3,
+         "FourRoom_2025"  = fmr_4)
 FMR <- FMR22 %>%
-  left_join(FMR23, by = "fips")
-  
+  left_join(FMR23[,c('Studio_2023','OneRoom_2023','TwoRoom_2023','ThreeRoom_2023','FourRoom_2023','fips')], by = 'fips') %>%
+  left_join(FMR24[,c('Studio_2024','OneRoom_2024','TwoRoom_2024','ThreeRoom_2024','FourRoom_2024','fips')], by = 'fips') %>%
+  left_join(FMR25[,c('Studio_2025','OneRoom_2025','TwoRoom_2025','ThreeRoom_2025','FourRoom_2025','fips')], by = 'fips') %>%
+  pivot_longer(cols = matches("Studio|OneRoom|TwoRoom|ThreeRoom|FourRoom"),
+               names_to = c(".value", "Year"),
+               names_sep = "_",
+               values_to = "fmr") %>%
+  group_by(fips, Year) %>%
+  dplyr::select(fips,Year,Studio,OneRoom,TwoRoom,ThreeRoom,FourRoom) %>%
+  mutate(fips = substr(fips,1,5),
+         Year = as.double(Year)) %>%
+  summarise(across(matches("Studio|OneRoom|TwoRoom|ThreeRoom|FourRoom"), ~ round(mean(.x, na.rm = TRUE), 0)),
+            .groups = "drop") %>%
+  rename(FIPS = fips) %>%
+  rename_with(~ paste0(., "_fmr"), matches("Studio|OneRoom|TwoRoom|ThreeRoom|FourRoom"))
+
+# Joining FMR data to CFPB
+## Only includes metric for 
+CFPB.FMR <- CFPB %>%
+  left_join(FMR,by = c('FIPS',"Year"))
+
+#10
+# PCA on Census variables
+## Storing correlation matrix of 
+
+{
+# from HW4
+## do PCA
+student.pca <- princomp(corr_matrix)
+summary(student.pca)
+fviz_eig(student.pca, addlabels = TRUE)
+biplot(student.pca)
+# loadings for first 5 components
+student.pca$loadings[, 1:5]
+# end HW4
+}
