@@ -277,18 +277,17 @@ DMClean <- DMClean[,c('Median debt in collections, White comm',
                       'Share of people in rural areas, White comm')]
 
 # Imputing missing data
-nb <- estim_ncpPCA(DMClean)          # estimates optimal number of components for imputation
+nb <- estim_ncpPCA(DMClean)          
 imputed <- imputePCA(DMClean, ncp = nb$ncp)
 data_imp <- imputed$completeObs
 
-# 2. Preprocess via caret: center, scale, and run PCA
+# PCA pre-processing
 pre_proc   <- preProcess(data_imp, method = c("center", "scale", "pca"), thresh = 0.75)
 data_pca   <- predict(pre_proc, data_imp)
 
-head(data_pca)
-data_pca
+View(data_pca)
 
-# caret stores the sdev of the PCs here
+# Generating/Viewing skree plots
 sdev <- pre_proc$std  # this is actually wrong for PCA -- use below instead
 
 # Correct approach: re-run prcomp on your scaled data, which caret does internally
