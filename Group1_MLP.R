@@ -5,7 +5,9 @@ pacman::p_load(
   readr,
   readxl,
   tidyverse,
-  VIM)
+  VIM,
+  caret,
+  missMDA)
 
 CFPB0 <- read_csv("sample26.01.csv")
 ZIPCODES <- read_csv("zip_fips.csv")
@@ -240,17 +242,64 @@ CFPB.FMR <- CFPB %>%
   left_join(FMR,by = c('FIPS',"Year"))
 
 #10
-# PCA on Census variables
-## Storing correlation matrix of 
+# PCA on debt collection variables using caret
 
-{
-# from HW4
-## do PCA
-student.pca <- princomp(corr_matrix)
-summary(student.pca)
-fviz_eig(student.pca, addlabels = TRUE)
-biplot(student.pca)
-# loadings for first 5 components
-student.pca$loadings[, 1:5]
-# end HW4
-}
+# setting neighborhoods as row names
+DebtMetrics1 <- DebtMetrics[,-c(1:3)]
+DMClean <- DebtMetrics1 |>
+  mutate(across(everything(),~ as.numeric(gsub(",", "", .x))))
+
+colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
+
+# Removing the variables with over 40% missing
+DMClean <- DMClean[,c('Median debt in collections, White comm',
+                      'Median debt in collections, All',
+                      'Auto/retail loan delinquency rate by credit score - Prime, All',
+                      'Auto/retail loan delinquency rate, White comm',
+                      'Credit card debt delinquency rate, White comm',
+                      'Auto/retail loan delinquency rate, All',
+                      'Share with any debt in collections, White comm',
+                      'Share with medical debt in collections, White comm',
+                      'Share with auto loans, White comm',
+                      'Share with auto/retail loan debt, White comm',
+                      'Share with student loan debt, White comm',
+                      'Credit card debt delinquency rate, All',
+                      'Share with any debt in collections, All',
+                      'Share with medical debt in collections, All',
+                      'Share with auto loans, All',
+                      'Share with auto/retail loan debt, All',
+                      'Share with student loan debt, All',
+                      'Average household income, Comm of color',
+                      'Average household income, White comm',
+                      'Share of people of color',
+                      'Average household income, All',
+                      'Share without a bachelor\'s degree, All',
+                      'Share of people in rural areas, White comm')]
+
+# Imputing missing data
+nb <- estim_ncpPCA(DMClean)          # estimates optimal number of components for imputation
+imputed <- imputePCA(DMClean, ncp = nb$ncp)
+data_imp <- imputed$completeObs
+
+# 2. Preprocess via caret: center, scale, and run PCA
+pre_proc   <- preProcess(data_imp, method = c("center", "scale", "pca"), thresh = 0.75)
+data_pca   <- predict(pre_proc, data_imp)
+
+head(data_pca)
+data_pca
+
+# caret stores the sdev of the PCs here
+sdev <- pre_proc$std  # this is actually wrong for PCA -- use below instead
+
+# Correct approach: re-run prcomp on your scaled data, which caret does internally
+data_scaled <- scale(data_imp)
+pca_check   <- prcomp(data_scaled)
+
+var_explained <- pca_check$sdev^2 / sum(pca_check$sdev^2) * 100
+cumvar        <- cumsum(var_explained)
+
+print(data.frame(
+  PC         = paste0("PC", 1:5),
+  individual = round(var_explained[1:5], 2),
+  cumulative = round(cumvar[1:5], 2)
+))
