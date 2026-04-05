@@ -287,9 +287,6 @@ data_pca   <- predict(pre_proc, data_imp)
 
 View(data_pca)
 
-# Generating/Viewing skree plots
-sdev <- pre_proc$std  # this is actually wrong for PCA -- use below instead
-
 # Correct approach: re-run prcomp on your scaled data, which caret does internally
 data_scaled <- scale(data_imp)
 pca_check   <- prcomp(data_scaled)
