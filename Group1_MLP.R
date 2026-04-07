@@ -35,6 +35,7 @@ CFPB1 <-CFPB0 |>
   filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
 
 #2.
+{
 # Imputing zip codes with means
 ## Each means-imputed value uses the average among the first 3 digits of non-missing "siblings"
 ## This produces 95 NAs for zip codes that do not have any non-missing siblings
@@ -73,7 +74,7 @@ CFPB2 <- df |>
   left_join(ZIP.impute, by = "prefix3") |>
   mutate(ZIP.Imputed = as.character(ifelse(ZIP.missing == 1, ZIP.imp, ZIP.char)),
          ZIP.missing = ifelse(nchar(ZIP.Imputed) < 5 | grepl("X$", ZIP.Imputed), 1, 0)) |>
-  select(-c(ZIP.char,ZIP.imp))
+  select(-c(ZIP.char,ZIP.imp, prefix3))
 
 # Checking to make sure states match
 StateCheck <- CFPB2 |>
@@ -84,13 +85,13 @@ table(StateCheck$state_match, useNA = "ifany")
 # try <- CFPB2[is.na(CFPB2$ZIP.missing),]
 
 #rm(StateCheck,CFPB0, CFPB1,df,try,ZIP.impute,ZIP.means,valid_zips)
-
+}
 #3.
-## First major cleaning of CFPB data
+{## First major cleaning of CFPB data
 CFPB3 <- CFPB2 |>
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
-         Year                         = year(Date.received),
+         Year                         = as.factor(year(Date.received)),
          Issue                        = as.factor(Issue),
          Sub.issue                    = as.factor(Sub.issue),
          Company.public.response      = as.factor(Company.public.response),
@@ -123,8 +124,9 @@ CFPB3 <- CFPB2 |>
   select(Relief, Received, Sent, Year, Wait.time,everything())
 # Verifying that the only incomplete cases are ones which did not impute
 # summary(!complete.cases(CFPB3))
-
+}
 #6.
+{
 AutoRetail <- read_xlsx("Question06/AutoRetail.xlsx")
 StudentLoan <- read_xlsx("Question06/StudentLoan.xlsx")
 OverallDebt <- read_xlsx("Question06/Overall.xlsx")
@@ -164,11 +166,10 @@ CFPB.debt <- CFPB3 |>
               select(-`County Name`,-`State Name`),
             by ="FIPS")
 
-colMeans(is.na(CFPB.debt[,23:72])) |> sort(decreasing = TRUE)
-
 #rm(CFPB.debt,AutoRetail,OverallDebt,StudentLoan,ZIPCODES)
-
+}
 #7.
+{
 INSECURE0 <- read_xlsx("Question07/credit-insecurity-index-data-workbook.xlsx", sheet = "County")
 INSECURE <- INSECURE0 |>
   pivot_longer(cols = "2018":"2023",
@@ -195,8 +196,9 @@ CFPB4 <- CFPB3 |>
             by = c("FIPS","Year"))|>
   select(-ZIP.missing)
 #rm(INSECURE, DebtMetrics,CFPB2,CFPB3)
-
+}
 #8
+{
 # Importing, cleaning, combining fair market rent data from 
 FMR22 <- read_xlsx("Question08/FY22_FMRs_revised.xlsx")|>
   rename(fips = fips2010,
@@ -244,8 +246,9 @@ FMR <- FMR22 |>
 ## Only includes metric for 
 CFPB.FMR <- CFPB4 |>
   left_join(FMR,by = c('FIPS',"Year"))
-
+}
 #10
+{
 # PCA on debt collection variables
 ## Note the following is a PCA on the county-level debt collection metrics
 ## There is severe missingness in this dataset
@@ -255,13 +258,13 @@ DebtMetrics1 <- DebtMetrics[,-c(1:3)]
 DMClean <- DebtMetrics1 |>
   mutate(across(everything(),~ as.numeric(gsub(",", "", .x))))
 
-colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
+# colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
 
 # Removing variables with over 30% missing - keeping 23 out of 50 variables
 missingRate <- colMeans(is.na(DMClean))
 DMClean <- DMClean[,missingRate <= 0.3]
 
-colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
+# colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
 
 # Imputing missing data
 ## estim_ncpPCA uses CV to determine a good number of Principal Components
@@ -319,3 +322,4 @@ scores <- as.data.frame(DebtMetrics.pca$x[,1:4]) |>
 
 CFPB <- CFPB4 |>
   left_join(scores,by="FIPS")
+}
