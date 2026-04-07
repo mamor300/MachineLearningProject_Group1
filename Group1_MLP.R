@@ -280,6 +280,87 @@ FMR <- FMR22 |>
 CFPB.FMR <- CFPB4 |>
   left_join(FMR,by = c('FIPS',"Year"))
 }
+#9.
+{
+installed.packages('tidycensus')
+library("tidyverse")
+library('tidycensus')
+library(tidycensus)
+library(tidyverse)
+
+library(tidycensus)
+library(tidyverse)
+
+# --- A. Setup Variable IDs ---
+young_males   <- sprintf("P12_%03dN", 3:10)
+young_females <- sprintf("P12_%03dN", 27:34)
+senior_vars   <- c(paste0("P12_0", 20:25, "N"), paste0("P12_0", 44:49, "N"))
+
+census_vars <- c(
+  total_pop    = "P1_001N",
+  female_total = "P12_026N",
+  hispanic     = "P9_002N",
+  white_nh     = "P9_005N",
+  black_nh     = "P9_006N",
+  black_female = "P12B_026N" 
+)
+
+# Combine all into one massive pull to avoid making multiple API calls
+all_vars <- c(census_vars, 
+              setNames(young_males, paste0("m_young_", 3:10)), 
+              setNames(young_females, paste0("f_young_", 27:34)),
+              setNames(senior_vars, paste0("senior_", 1:12)))
+
+# --- B. Pull the Data ---
+census_raw <- get_decennial(
+  geography = "county",
+  variables = all_vars,
+  year = 2020,
+  sumfile = "dhc",
+  output = "wide"
+)
+2. Feature Engineering
+Now we create the proportions and the Older County dummy.
+
+# --- C. Create Proportions and Dummies ---
+census_features <- census_raw %>%
+  mutate(
+    # Summing the age groups
+    total_young    = rowSums(select(., starts_with("m_young"), starts_with("f_young"))),
+    total_65plus   = rowSums(select(., starts_with("senior_"))),
+    
+    # Proportions (Features)
+    prop_young      = total_young / total_pop,
+    prop_65plus     = total_65plus / total_pop,
+    prop_female     = female_total / total_pop,
+    prop_hispanic   = hispanic / total_pop,
+    prop_black      = black_nh / total_pop,
+    prop_black_fem  = black_female / total_pop,
+    
+    # Dummy variable (Requirement 1.a.ii.2)
+    is_older_county = if_else(prop_65plus > 0.17, 1, 0)
+  ) %>%
+  select(FIPS = GEOID, starts_with("prop_"), is_older_county)
+
+# --- D. Standardize for PCA (Requirement 1.c.i) ---
+census_scaled <- census_features %>%
+  mutate(across(starts_with("prop_"), ~as.vector(scale(.))))
+# --- E. Tag Dummies (Requirement 1.v) ---
+CFPB.FMR <- CFPB.FMR %>%
+  mutate(
+    is_servicemember = if_else(grepl("Servicemember", Tags, ignore.case = TRUE), 1, 0),
+    is_older_american = if_else(grepl("Older American", Tags, ignore.case = TRUE), 1, 0),
+    # Ensure FIPS matches Census format
+    FIPS = sprintf("%05s", as.character(FIPS))
+  )
+
+# --- F. The Final Join ---
+CFPB_Census <- CFPB.FMR %>%
+  left_join(census_scaled, by = "FIPS")
+#rm(age_clean, age_vars, all_bps_years, all_bps_years_clean, census_demographics, 
+#  census_features, census_raw, census_scaled, CFPB_Final_Analysis, CFPB_Final_Bias, 
+#  CFPB_with_Permits)
+}
 #10.
 {
 # PCA on debt collection variables
