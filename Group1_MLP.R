@@ -1,5 +1,4 @@
 setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 - Machines/DataProject/MachineLearningProject_Group1')
-rm(list=ls())
 
 pacman::p_load(
   readr,
@@ -10,6 +9,8 @@ pacman::p_load(
   caret,
   missMDA)
 
+#1. 
+{
 CFPB0 <- read_csv("sample26.01.csv")
 ZIPCODES <- read_csv("zip_fips.csv")
 
@@ -33,7 +34,7 @@ CFPB0 <- CFPB0[,-c(1)]|>
 CFPB1 <-CFPB0 |>
   drop_na(Date.sent.to.company)|>
   filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
-
+}
 #2.
 {
 # Imputing zip codes with means
@@ -125,6 +126,38 @@ CFPB3 <- CFPB2 |>
 # Verifying that the only incomplete cases are ones which did not impute
 # summary(!complete.cases(CFPB3))
 }
+#5.
+{
+#Adding Fed measure for household debt by county 
+county_debt<- read.csv("household-debt-by-county.csv")
+#Clearing the rows that are not 2020-2025
+#CFPB.household_debt<- make new data frame with this for question 5
+#using the household debt data, cleaning and formatting it from 
+#long to wide
+
+##Reshaping the county_debt data to be merged with CFPB
+colnames(CFPB)
+colnames(county_debt)
+
+#Alignging the FIPS codes to be the same in both data sets 
+CFPB<- CFPB %>% 
+  mutate(FIPS = str_pad(as.character(FIPS), width = 5, pad = '0'))
+county_debt<- county_debt %>% 
+  mutate(area_fips = str_pad(as.character(area_fips), width = 5, pad = '0'))
+
+#Pivot from long to wide, each row will represent one county/year/quarter combo
+#with 'low' and 'high' debt columns 
+
+CFPB<- CFPB %>% 
+  mutate(
+    Received = as.Date(Received, format = '%Y-%m-%d'), 
+    year = as.integer(format(Received, '%Y')), 
+    qtr = quarter(Received)
+  )
+
+merged_debt_county<- CFPB %>% 
+  left_join(county_debt, by = c('FIPS' = 'area_fips', 'year', 'qtr'))
+}
 #6.
 {
 AutoRetail <- read_xlsx("Question06/AutoRetail.xlsx")
@@ -197,7 +230,7 @@ CFPB4 <- CFPB3 |>
   select(-ZIP.missing)
 #rm(INSECURE, DebtMetrics,CFPB2,CFPB3)
 }
-#8
+#8.
 {
 # Importing, cleaning, combining fair market rent data from 
 FMR22 <- read_xlsx("Question08/FY22_FMRs_revised.xlsx")|>
@@ -247,7 +280,7 @@ FMR <- FMR22 |>
 CFPB.FMR <- CFPB4 |>
   left_join(FMR,by = c('FIPS',"Year"))
 }
-#10
+#10.
 {
 # PCA on debt collection variables
 ## Note the following is a PCA on the county-level debt collection metrics
