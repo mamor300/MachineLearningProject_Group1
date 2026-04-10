@@ -1,0 +1,6 @@
+Label		Description
+year		Yearly observation date.
+qtr 		Quarterly observation date, end of period.
+area_fips 	Combination of 2-digit U.S. state Federal Information Processing Standard(FIPS) code preceding 3-digit U.S. county FIPS code.
+low		Lower bound of Debt-to-Income ratio category.
+high		Upper bound of Debt-to-Income ratio category.

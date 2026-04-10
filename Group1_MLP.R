@@ -1,5 +1,4 @@
 setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 - Machines/DataProject/MachineLearningProject_Group1')
-rm(list=ls())
 
 pacman::p_load(
   readr,
@@ -10,6 +9,8 @@ pacman::p_load(
   caret,
   missMDA)
 
+#1. 
+{
 CFPB0 <- read_csv("sample26.01.csv")
 ZIPCODES <- read_csv("zip_fips.csv")
 
@@ -30,11 +31,12 @@ CFPB0 <- CFPB0[,-c(1)]|>
 # Dropping Observations
 ## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
 ## Dropping observations not in the 50 states
-CFPB1 <-CFPB0 |>
+CFPB1 <- CFPB0 |>
   drop_na(Date.sent.to.company)|>
   filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
-
+}
 #2.
+{
 # Imputing zip codes with means
 ## Each means-imputed value uses the average among the first 3 digits of non-missing "siblings"
 ## This produces 95 NAs for zip codes that do not have any non-missing siblings
@@ -73,7 +75,7 @@ CFPB2 <- df |>
   left_join(ZIP.impute, by = "prefix3") |>
   mutate(ZIP.Imputed = as.character(ifelse(ZIP.missing == 1, ZIP.imp, ZIP.char)),
          ZIP.missing = ifelse(nchar(ZIP.Imputed) < 5 | grepl("X$", ZIP.Imputed), 1, 0)) |>
-  select(-c(ZIP.char,ZIP.imp))
+  select(-c(ZIP.char,ZIP.imp, prefix3))
 
 # Checking to make sure states match
 StateCheck <- CFPB2 |>
@@ -84,13 +86,13 @@ table(StateCheck$state_match, useNA = "ifany")
 # try <- CFPB2[is.na(CFPB2$ZIP.missing),]
 
 #rm(StateCheck,CFPB0, CFPB1,df,try,ZIP.impute,ZIP.means,valid_zips)
-
+}
 #3.
-## First major cleaning of CFPB data
+{## First major cleaning of CFPB data
 CFPB3 <- CFPB2 |>
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
-         Year                         = year(Date.received),
+         Year                         = as.factor(year(Date.received)),
          Issue                        = as.factor(Issue),
          Sub.issue                    = as.factor(Sub.issue),
          Company.public.response      = as.factor(Company.public.response),
@@ -123,8 +125,41 @@ CFPB3 <- CFPB2 |>
   select(Relief, Received, Sent, Year, Wait.time,everything())
 # Verifying that the only incomplete cases are ones which did not impute
 # summary(!complete.cases(CFPB3))
+}
+#5.
+{
+#Adding Fed measure for household debt by county 
+county_debt<- read.csv("household-debt-by-county.csv")
+#Clearing the rows that are not 2020-2025
+#CFPB.household_debt<- make new data frame with this for question 5
+#using the household debt data, cleaning and formatting it from 
+#long to wide
 
+##Reshaping the county_debt data to be merged with CFPB
+colnames(CFPB)
+colnames(county_debt)
+
+#Alignging the FIPS codes to be the same in both data sets 
+CFPB <- CFPB3 %>% 
+  mutate(FIPS = str_pad(as.character(FIPS), width = 5, pad = '0'))
+county_debt <- county_debt %>% 
+  mutate(area_fips = str_pad(as.character(area_fips), width = 5, pad = '0'))
+
+#Pivot from long to wide, each row will represent one county/year/quarter combo
+#with 'low' and 'high' debt columns 
+
+CFPB <- CFPB %>% 
+  mutate(
+    Received = as.Date(Received, format = '%Y-%m-%d'), 
+    year = as.integer(format(Received, '%Y')), 
+    qtr = quarter(Received)
+  )
+
+merged_debt_county <- CFPB %>% 
+  left_join(county_debt, by = c('FIPS' = 'area_fips', 'year', 'qtr'))
+}
 #6.
+{
 AutoRetail <- read_xlsx("Question06/AutoRetail.xlsx")
 StudentLoan <- read_xlsx("Question06/StudentLoan.xlsx")
 OverallDebt <- read_xlsx("Question06/Overall.xlsx")
@@ -164,11 +199,10 @@ CFPB.debt <- CFPB3 |>
               select(-`County Name`,-`State Name`),
             by ="FIPS")
 
-colMeans(is.na(CFPB.debt[,23:72])) |> sort(decreasing = TRUE)
-
 #rm(CFPB.debt,AutoRetail,OverallDebt,StudentLoan,ZIPCODES)
-
+}
 #7.
+{
 INSECURE0 <- read_xlsx("Question07/credit-insecurity-index-data-workbook.xlsx", sheet = "County")
 INSECURE <- INSECURE0 |>
   pivot_longer(cols = "2018":"2023",
@@ -195,8 +229,9 @@ CFPB4 <- CFPB3 |>
             by = c("FIPS","Year"))|>
   select(-ZIP.missing)
 #rm(INSECURE, DebtMetrics,CFPB2,CFPB3)
-
-#8
+}
+#8.
+{
 # Importing, cleaning, combining fair market rent data from 
 FMR22 <- read_xlsx("Question08/FY22_FMRs_revised.xlsx")|>
   rename(fips = fips2010,
@@ -244,8 +279,90 @@ FMR <- FMR22 |>
 ## Only includes metric for 
 CFPB.FMR <- CFPB4 |>
   left_join(FMR,by = c('FIPS',"Year"))
+}
+#9.
+{
+installed.packages('tidycensus')
+library("tidyverse")
+library('tidycensus')
+library(tidycensus)
+library(tidyverse)
 
-#10
+library(tidycensus)
+library(tidyverse)
+
+# --- A. Setup Variable IDs ---
+young_males   <- sprintf("P12_%03dN", 3:10)
+young_females <- sprintf("P12_%03dN", 27:34)
+senior_vars   <- c(paste0("P12_0", 20:25, "N"), paste0("P12_0", 44:49, "N"))
+
+census_vars <- c(
+  total_pop    = "P1_001N",
+  female_total = "P12_026N",
+  hispanic     = "P9_002N",
+  white_nh     = "P9_005N",
+  black_nh     = "P9_006N",
+  black_female = "P12B_026N" 
+)
+
+# Combine all into one massive pull to avoid making multiple API calls
+all_vars <- c(census_vars, 
+              setNames(young_males, paste0("m_young_", 3:10)), 
+              setNames(young_females, paste0("f_young_", 27:34)),
+              setNames(senior_vars, paste0("senior_", 1:12)))
+
+# --- B. Pull the Data ---
+census_raw <- get_decennial(
+  geography = "county",
+  variables = all_vars,
+  year = 2020,
+  sumfile = "dhc",
+  output = "wide"
+)
+2. Feature Engineering
+Now we create the proportions and the Older County dummy.
+
+# --- C. Create Proportions and Dummies ---
+census_features <- census_raw %>%
+  mutate(
+    # Summing the age groups
+    total_young    = rowSums(select(., starts_with("m_young"), starts_with("f_young"))),
+    total_65plus   = rowSums(select(., starts_with("senior_"))),
+    
+    # Proportions (Features)
+    prop_young      = total_young / total_pop,
+    prop_65plus     = total_65plus / total_pop,
+    prop_female     = female_total / total_pop,
+    prop_hispanic   = hispanic / total_pop,
+    prop_black      = black_nh / total_pop,
+    prop_black_fem  = black_female / total_pop,
+    
+    # Dummy variable (Requirement 1.a.ii.2)
+    is_older_county = if_else(prop_65plus > 0.17, 1, 0)
+  ) %>%
+  select(FIPS = GEOID, starts_with("prop_"), is_older_county)
+
+# --- D. Standardize for PCA (Requirement 1.c.i) ---
+census_scaled <- census_features %>%
+  mutate(across(starts_with("prop_"), ~as.vector(scale(.))))
+# --- E. Tag Dummies (Requirement 1.v) ---
+CFPB.FMR <- CFPB.FMR %>%
+  mutate(
+    is_servicemember = if_else(grepl("Servicemember", Tags, ignore.case = TRUE), 1, 0),
+    is_older_american = if_else(grepl("Older American", Tags, ignore.case = TRUE), 1, 0),
+    # Ensure FIPS matches Census format
+    FIPS = sprintf("%05s", as.character(FIPS))
+  )
+
+# --- F. The Final Join ---
+CFPB_Census <- CFPB.FMR %>%
+  left_join(census_scaled, by = "FIPS")
+#rm(age_clean, age_vars, all_bps_years, all_bps_years_clean, census_demographics, 
+#  census_features, census_raw, census_scaled, CFPB_Final_Analysis, CFPB_Final_Bias, 
+#  CFPB_with_Permits)
+}
+#10.
+{
 # PCA on debt collection variables
 ## Note the following is a PCA on the county-level debt collection metrics
 ## There is severe missingness in this dataset
@@ -255,13 +372,13 @@ DebtMetrics1 <- DebtMetrics[,-c(1:3)]
 DMClean <- DebtMetrics1 |>
   mutate(across(everything(),~ as.numeric(gsub(",", "", .x))))
 
-colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
+# colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
 
 # Removing variables with over 30% missing - keeping 23 out of 50 variables
 missingRate <- colMeans(is.na(DMClean))
 DMClean <- DMClean[,missingRate <= 0.3]
 
-colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
+# colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
 
 # Imputing missing data
 ## estim_ncpPCA uses CV to determine a good number of Principal Components
@@ -319,3 +436,4 @@ scores <- as.data.frame(DebtMetrics.pca$x[,1:4]) |>
 
 CFPB <- CFPB4 |>
   left_join(scores,by="FIPS")
+}
