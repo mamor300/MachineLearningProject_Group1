@@ -1,5 +1,7 @@
 setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 - Machines/DataProject/MachineLearningProject_Group1')
 
+install.packages("tidycensus")
+
 pacman::p_load(
   readr,
   readxl,
@@ -7,7 +9,8 @@ pacman::p_load(
   tidyverse,
   VIM,
   caret,
-  missMDA)
+  missMDA,
+  tidycensus)
 
 #1. 
 {
@@ -88,7 +91,8 @@ table(StateCheck$state_match, useNA = "ifany")
 #rm(StateCheck,CFPB0, CFPB1,df,try,ZIP.impute,ZIP.means,valid_zips)
 }
 #3.
-{## First major cleaning of CFPB data
+{
+## First major cleaning of CFPB data
 CFPB3 <- CFPB2 |>
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
@@ -136,27 +140,28 @@ county_debt<- read.csv("household-debt-by-county.csv")
 #long to wide
 
 ##Reshaping the county_debt data to be merged with CFPB
-colnames(CFPB)
+colnames(CFPB3)
 colnames(county_debt)
 
 #Alignging the FIPS codes to be the same in both data sets 
-CFPB <- CFPB3 %>% 
+CFPB.countydebt <- CFPB3 %>% 
   mutate(FIPS = str_pad(as.character(FIPS), width = 5, pad = '0'))
 county_debt <- county_debt %>% 
-  mutate(area_fips = str_pad(as.character(area_fips), width = 5, pad = '0'))
+  mutate(area_fips = str_pad(as.character(area_fips), width = 5, pad = '0'))%>%
+  rename(Year=year)
 
 #Pivot from long to wide, each row will represent one county/year/quarter combo
 #with 'low' and 'high' debt columns 
 
-CFPB <- CFPB %>% 
+CFPB.countydebt <- CFPB.countydebt %>% 
   mutate(
     Received = as.Date(Received, format = '%Y-%m-%d'), 
-    year = as.integer(format(Received, '%Y')), 
+    Year = as.integer(format(Received, '%Y')), 
     qtr = quarter(Received)
   )
 
-merged_debt_county <- CFPB %>% 
-  left_join(county_debt, by = c('FIPS' = 'area_fips', 'year', 'qtr'))
+CFPB5 <- CFPB.countydebt %>% 
+  left_join(county_debt, by = c('FIPS' = 'area_fips', 'Year', 'qtr'))
 }
 #6.
 {
@@ -194,12 +199,10 @@ DebtMetrics.clean <- DebtMetrics |>
   mutate(across(-c(`County Name`,FIPS,`State Name`),~ as.numeric(gsub(",", "", .x))))
 
 # Joining CFPB and Debt data for inspection
-CFPB.debt <- CFPB3 |>
+CFPB6 <- CFPB5 |>
   left_join(DebtMetrics.clean |>
               select(-`County Name`,-`State Name`),
             by ="FIPS")
-
-#rm(CFPB.debt,AutoRetail,OverallDebt,StudentLoan,ZIPCODES)
 }
 #7.
 {
@@ -214,21 +217,10 @@ INSECURE <- INSECURE0 |>
   rename(FIPS = GEOID)
 # Joining credit insecurity data with CFPB
 ## The only years of overlap are 2022 and 2023. This filters everything else out
-CFPB.insecurity <- CFPB3 |>
+CFPB7 <- CFPB6 |>
   left_join(INSECURE |>
               select(-`County Name`,-State),
-            by = c("FIPS","Year"))|>
-  filter(Year %in% c("2018":"2023"))
-#rm(CFPB.insecurity,INSECURE0)
-
-# Joining Debt and Credit Insecurity datasets to CFPB
-## Previous CFPB data frame and references to it are changed to CFPB3 
-CFPB4 <- CFPB3 |>
-  left_join(INSECURE |>
-              select(-`County Name`,-State),
-            by = c("FIPS","Year"))|>
-  select(-ZIP.missing)
-#rm(INSECURE, DebtMetrics,CFPB2,CFPB3)
+            by = c("FIPS","Year"))
 }
 #8.
 {
@@ -277,20 +269,98 @@ FMR <- FMR22 |>
 
 # Joining FMR data to CFPB
 ## Only includes metric for 
-CFPB.FMR <- CFPB4 |>
+CFPB.FMR <- CFPB7 |>
   left_join(FMR,by = c('FIPS',"Year"))
+
+##Adding in County level building permit requests 
+
+# Function to pull and format BPS data by year
+# Direct URL for 2022 County Annual Data
+url_2022 <- "https://www2.census.gov/econ/bps/County/co2204y.txt"
+
+# Read the data
+bps_2022_raw <- read.csv(url_2022, skip = 2, header = FALSE)
+
+# Format the data to match  CFPB.FMR dataset
+bps_2022_clean <- bps_2022_raw %>%
+  mutate(
+    # Combine State (V2) and County (V3) to create a 5-digit FIPS
+    # %02d ensures state has 2 digits (01, 02)
+    # %03d ensures county has 3 digits (001, 002)
+    FIPS = paste0(sprintf("%02d", V2), sprintf("%03d", V3)),
+    
+    # Label the Year so it matches existing data
+    Year = 2022,
+    
+    # V7 is the standard column for 'Total Housing Units' authorized
+    Permit_Units = V7,
+    
+    # V8 is the total 'Valuation' (dollar amount) of those permits
+    Permit_Valuation = V8
+  ) %>%
+  select(FIPS, Year, Permit_Units, Permit_Valuation, County_Name = V6)
+
+# Quick check
+head(bps_2022_clean)
+# This force-formats  existing FIPS to a 5-character string
+CFPB.FMR <- CFPB.FMR %>%
+  mutate(FIPS = sprintf("%05s", as.character(FIPS)))
+
+# use left_join so we don't lose any of  original rows
+CFPB_with_Permits <- CFPB.FMR %>%
+  filter(Year == 2022) %>% # Let's isolate 2022 for now
+  left_join(bps_2022_clean, by = "FIPS")
+
+# View the result
+summary(CFPB_with_Permits$Permit_Units)
+
+#Pulling 2023 data 
+url_2023 <- "https://www2.census.gov/econ/bps/County/co2304y.txt"
+bps_2023_raw <- read.csv(url_2023, skip = 2, header = FALSE)
+
+bps_2023_clean <- bps_2023_raw %>%
+  mutate(
+    FIPS = paste0(sprintf("%02d", V2), sprintf("%03d", V3)),
+    Year = 2023,
+    Permit_Units = V7,
+    Permit_Valuation = V8
+  ) %>%
+  select(FIPS, Year, Permit_Units, Permit_Valuation, County_Name = V6)
+
+#Pulling 2024 data 
+url_2024 <- "https://www2.census.gov/econ/bps/County/co2404y.txt"
+bps_2024_raw <- read.csv(url_2024, skip = 2, header = FALSE)
+
+bps_2024_clean <- bps_2024_raw %>%
+  mutate(
+    FIPS = paste0(sprintf("%02d", V2), sprintf("%03d", V3)),
+    Year = 2024,
+    Permit_Units = V7,
+    Permit_Valuation = V8
+  ) %>%
+  select(FIPS, Year, Permit_Units, Permit_Valuation, County_Name = V6)
+
+##Stacking all years together: 
+all_bps_years<- bind_rows(bps_2022_clean, bps_2023_clean, bps_2024_clean)
+
+# Look at the first few FIPS in both
+head(CFPB.FMR$FIPS)
+head(all_bps_years$FIPS)
+
+# This filters out the header/footer junk from the Census files
+all_bps_years_clean <- all_bps_years %>%
+  filter(!is.na(Permit_Units)) %>%
+  filter(FIPS != "NA0NA")
+
+CFPB8 <- CFPB.FMR %>%
+  left_join(all_bps_years_clean, by = c("FIPS", "Year"))
+
+#Verify the results 
+# This shoudl show the counts for each year 
+table(CFPB8$Year)
 }
 #9.
 {
-installed.packages('tidycensus')
-library("tidyverse")
-library('tidycensus')
-library(tidycensus)
-library(tidyverse)
-
-library(tidycensus)
-library(tidyverse)
-
 # --- A. Setup Variable IDs ---
 young_males   <- sprintf("P12_%03dN", 3:10)
 young_females <- sprintf("P12_%03dN", 27:34)
@@ -319,8 +389,8 @@ census_raw <- get_decennial(
   sumfile = "dhc",
   output = "wide"
 )
-2. Feature Engineering
-Now we create the proportions and the Older County dummy.
+# 2. Feature Engineering
+# Now we create the proportions and the Older County dummy.
 
 # --- C. Create Proportions and Dummies ---
 census_features <- census_raw %>%
@@ -346,7 +416,7 @@ census_features <- census_raw %>%
 census_scaled <- census_features %>%
   mutate(across(starts_with("prop_"), ~as.vector(scale(.))))
 # --- E. Tag Dummies (Requirement 1.v) ---
-CFPB.FMR <- CFPB.FMR %>%
+CFPB.dummies <- CFPB8 %>%
   mutate(
     is_servicemember = if_else(grepl("Servicemember", Tags, ignore.case = TRUE), 1, 0),
     is_older_american = if_else(grepl("Older American", Tags, ignore.case = TRUE), 1, 0),
@@ -355,7 +425,7 @@ CFPB.FMR <- CFPB.FMR %>%
   )
 
 # --- F. The Final Join ---
-CFPB_Census <- CFPB.FMR %>%
+CFPB9 <- CFPB.dummies %>%
   left_join(census_scaled, by = "FIPS")
 #rm(age_clean, age_vars, all_bps_years, all_bps_years_clean, census_demographics, 
 #  census_features, census_raw, census_scaled, CFPB_Final_Analysis, CFPB_Final_Bias, 
@@ -367,17 +437,20 @@ CFPB_Census <- CFPB.FMR %>%
 ## Note the following is a PCA on the county-level debt collection metrics
 ## There is severe missingness in this dataset
 
-# setting neighborhoods as row names
+# Setting neighborhoods as row names
+## You'll see a warning for 49 NAs introduced. This is by design
 DebtMetrics1 <- DebtMetrics[,-c(1:3)]
 DMClean <- DebtMetrics1 |>
   mutate(across(everything(),~ as.numeric(gsub(",", "", .x))))
 
+# Checking percentage of columns that have NAs
 # colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
 
 # Removing variables with over 30% missing - keeping 23 out of 50 variables
 missingRate <- colMeans(is.na(DMClean))
 DMClean <- DMClean[,missingRate <= 0.3]
 
+# Checking percentage of columns that have NAs again
 # colMeans(is.na(DMClean)) |> sort(decreasing = TRUE)
 
 # Imputing missing data
@@ -434,6 +507,6 @@ Cumulative.pca |>
 scores <- as.data.frame(DebtMetrics.pca$x[,1:4]) |>
   mutate(FIPS = DebtMetrics[[1]])
 
-CFPB <- CFPB4 |>
+CFPB10 <- CFPB9 |>
   left_join(scores,by="FIPS")
 }
