@@ -31,7 +31,7 @@ CFPB0 <- CFPB0[,-c(1)]|>
 # Dropping Observations
 ## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
 ## Dropping observations not in the 50 states
-CFPB1 <-CFPB0 |>
+CFPB1 <- CFPB0 |>
   drop_na(Date.sent.to.company)|>
   filter(!State %in% c("NONE", "None", "DC", "AA","AE", "AP", "AS", "FM","GU", "MH", "MP", "PR", "VI", "UNITED STATES MINOR OUTLYING ISLANDS"))
 }
@@ -140,22 +140,22 @@ colnames(CFPB)
 colnames(county_debt)
 
 #Alignging the FIPS codes to be the same in both data sets 
-CFPB<- CFPB %>% 
+CFPB <- CFPB3 %>% 
   mutate(FIPS = str_pad(as.character(FIPS), width = 5, pad = '0'))
-county_debt<- county_debt %>% 
+county_debt <- county_debt %>% 
   mutate(area_fips = str_pad(as.character(area_fips), width = 5, pad = '0'))
 
 #Pivot from long to wide, each row will represent one county/year/quarter combo
 #with 'low' and 'high' debt columns 
 
-CFPB<- CFPB %>% 
+CFPB <- CFPB %>% 
   mutate(
     Received = as.Date(Received, format = '%Y-%m-%d'), 
     year = as.integer(format(Received, '%Y')), 
     qtr = quarter(Received)
   )
 
-merged_debt_county<- CFPB %>% 
+merged_debt_county <- CFPB %>% 
   left_join(county_debt, by = c('FIPS' = 'area_fips', 'year', 'qtr'))
 }
 #6.
