@@ -1,7 +1,7 @@
 #12
 #code below will just left join everything selected into CFPB
 #do not run these again if you have the dataset with CFPB already combined
-CFPB <- CFPB10 |>
+CFPB <- CFPB11 |>
   left_join(sahie, by = c('FIPS', "Year")) |>
   select(-c(state, county, NAME))
 CFPB <- CFPB |>

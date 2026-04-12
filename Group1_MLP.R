@@ -14,7 +14,8 @@ pacman::p_load(
   tidycensus,
   randomForest,
   clustMixType,
-  censusapi)
+  censusapi,
+  forcats)
 
 #1. 
 {
@@ -33,8 +34,8 @@ CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in%
                        "Closed with non-monetary relief"),
                     1,0)
 CFPB0 <- CFPB0[,-c(1)]|>
-  select(Relief,Date.received, Date.sent.to.company,everything())|>
-  select(-Company.response.to.consumer)
+  select(Relief,Date.received, Date.sent.to.company,everything())
+  #select(-Company.response.to.consumer)
 
 # Dropping Observations
 ## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
@@ -459,19 +460,18 @@ all_bps_years_clean <- all_bps_years %>%
   filter(!is.na(Permit_Units)) %>%
   filter(FIPS != "NA0NA")
 
-CFPB8 <- CFPB.FMR %>%
+CFPB.bps <- CFPB.FMR %>%
   left_join(all_bps_years_clean, by = c("FIPS", "Year"))
 
 #Verify the results 
 # This should show the counts for each year 
-table(CFPB8$Year)
+table(CFPB.bps$Year)
 Sys.setenv(CENSUS_KEY = "ba79958600ff02f01da8a857d6a3243c191cfc8a")
 sahie_vars <- listCensusMetadata(
   name = "timeseries/healthins/sahie",
   type = "variables"
 )
 #this will show you what all the variables chosen below are
-View(sahie_vars)
 library(purrr)
 #no 2024 or 2025 data
 sahie <- map_dfr(2022:2023, ~getCensus(
@@ -484,8 +484,14 @@ sahie <- map_dfr(2022:2023, ~getCensus(
   select(-time) |>
   rename(Year = YEAR, FIPS = fips)
 sahie$Year <- as.numeric(sahie$Year)
-CFPB.sahie <- CFPB8 |>
+CFPB.sahie <- CFPB.bps |>
   left_join(sahie,by = c('FIPS',"Year"))
+compiled_county_education_measures <- read_csv("Question08/compiled_county_education_measures.csv")|>
+  select(fips,pct_bach_degree,year)|>
+  rename(FIPS = fips,
+         Year = year)
+CFPB8 <- CFPB.bps |>
+  left_join(compiled_county_education_measures,by= c("FIPS","Year"))
 }
 #9.
 {
@@ -672,10 +678,128 @@ CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
   #this aint workin for some reason
   #clprofiles(kpres, CFPB_clust_complete,
   #col = wes_palette("Royal1", 5, type = "continuous")) # figure 1
-  plot(kpres)
+  #plot(kpres)
   #Save cluster assignments
   CFPB10$cluster <- NA
   CFPB10$cluster[complete_idx] <- kpres$cluster
   CFPB10$cluster <- as.factor(CFPB10$cluster)
+  CFPB11 <- CFPB10
   
 }
+#12
+{
+#random forest imputation
+set.seed(12345)
+sapply(CFPB11, class)
+CFPBimpute <- CFPB11 %>%
+  mutate(across(where(is.character), as.factor))%>%
+  mutate(across(where(is.logical), as.factor))%>%
+  mutate(across(where(~ inherits(., "Date")), as.numeric))
+sapply(CFPBimpute[sapply(CFPBimpute, is.factor)], nlevels) %>% 
+  sort(decreasing = TRUE) %>% 
+  head(20)
+#all of these had more than 53 categories (alot more) so I dropped them
+## I wouldn't drop all of these. Since we have 60K observations, ZIP code could be predictive
+drop_cols_CFPB <- c(
+  "ZIP",
+  "FIPS",
+  "Company",
+  "County_Name",
+  "CI Index Score",
+  "Not Credit Included",
+  "Credit Constrained"
+  )
+CFPBimpute <- CFPBimpute %>%
+  select(-all_of(drop_cols_CFPB)) %>%
+  mutate(across(where(is.character), as.factor))
+CFPBimpute$Received <- as.numeric(CFPBimpute$Received)
+CFPBimpute$Sent <- as.numeric(CFPBimpute$Sent)
+CFPBimpute$qtr <- as.numeric(CFPBimpute$qtr)
+#CFPBimpute<- rfImpute(Cust.response~., iter = 5, ntree = 50 ,data=CFPBimpute)
+sapply(CFPBimpute, class)
+#for whatever reason these were factors not numeric
+# cols_to_convert <- c(
+#   "Share with medical debt in collections",
+#   "Median medical debt in collections in $2023",
+#   "Hospital market concentration (HHI)",
+#   "Number of Closures and Mergers",
+#   "Share of the population with no health insurance coverage",
+#   "Share of non-elderly adults with a reported disability",
+#   "Average household income in $2023",
+#   "Median medical debt in collections in $2023 - Majority White",
+#   "Median medical debt in collections in $2023 - Majority of Color",
+#   "Share with medical debt in collections - Majority White",
+#   "Share with medical debt in collections - Majority of Color",
+#   "Median medical debt in collections in $2023"
+# )
+# CFPBimpute <- CFPBimpute %>%
+#   mutate(across(all_of(cols_to_convert), ~ as.numeric(as.character(.x))))
+#since rfImpute cant impute y and y is what we want to predict in the future I'm going to do a median imputation on y and random forest on everything else
+#pre_median <- preProcess(CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE], 
+#method = "medianImpute")
+#imputedmeddebt <- predict(pre_median, CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE])
+#CFPBimpute$`Median medical debt in collections in $2023` <- imputedmeddebt[[1]]
+#hitting vector ceiling on everything need to take a sample
+#CFPBimpute <- rfImpute(`Median medical debt in collections in $2023` ~ ., iter = 3, ntree = 20, 
+#maxnodes = 50, data = CFPBimpute)
+
+#CFPBimputed <- missForest(
+#CFPBimpute,
+#ntree = 20,
+#maxiter = 3,
+#maxnodes = 50
+#)
+CFPBimpute$Relief <- as.factor(CFPBimpute$Relief)
+na_cols <- names(which(colSums(is.na(CFPBimpute)) > 0))
+set.seed(12345)
+idx <- sample(nrow(CFPBimpute), 10000)
+CFPBsample <- CFPBimpute[idx, ]
+CFPBsample_imputed <- rfImpute(
+  Relief ~ .,
+  iter     = 3,
+  ntree    = 20,
+  maxnodes = 50,
+  data     = CFPBsample
+)
+# Build a random forest on the imputed sample for each NA column,
+# then predict into the full dataset
+
+CFPBimpute_out <- CFPBimpute
+
+for (col in na_cols) {
+  
+  missing_idx <- which(is.na(CFPBimpute_out[[col]]))
+  if (length(missing_idx) == 0) next
+  
+  # Predictors: everything except the target column
+  predictors <- setdiff(names(CFPBsample_imputed), col)
+  
+  # Train RF on the clean imputed sample
+  rf_model <- randomForest(
+    x        = CFPBsample_imputed[, predictors],
+    y        = CFPBsample_imputed[[col]],
+    ntree    = 20,
+    maxnodes = 50
+  )
+  
+  # Predict only for rows missing this column
+  # Use other already-imputed cols where possible, median/mode fill any remaining NAs in predictors
+  newdata <- CFPBimpute_out[missing_idx, predictors]
+  
+  for (p in predictors) {
+    if (any(is.na(newdata[[p]]))) {
+      if (is.numeric(newdata[[p]])) {
+        newdata[[p]][is.na(newdata[[p]])] <- median(CFPBsample_imputed[[p]], na.rm = TRUE)
+      } else {
+        mode_val <- names(sort(table(CFPBsample_imputed[[p]]), decreasing = TRUE))[1]
+        newdata[[p]][is.na(newdata[[p]])] <- mode_val
+      }
+    }
+  }
+  
+  CFPBimpute_out[[col]][missing_idx] <- predict(rf_model, newdata = newdata)
+}
+}
+CFPB <- CFPBimpute_out
+rm(list = setdiff(ls(), "CFPB"))
+gc()
