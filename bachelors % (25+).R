@@ -1,12 +1,13 @@
 library(tidyverse)
 library(readxl)
-
+setwd("/Users/mattamor/MachineLearningProject_Group1")
 # --- 1. SETUP FILE PATHS ---
 folder_path <- "C:/Users/alanj/Downloads/productDownload_2026-04-07T194031/"
+folder_path <- "/Users/mattamor/MachineLearningProject_Group1/"
 edu_files <- c("2020 educational attainment.csv", "2021 educational attainment.csv", 
                "2022 educational attainment.csv", "2023 educational attainment.csv", 
                "2024 educational attainment.csv")
-pop_file <- paste0(folder_path, "population at couny level.xlsx")
+pop_file <- paste0(folder_path, "population_at_couny_level.xlsx")
 
 process_edu <- function(file_name) {
   year <- str_extract(file_name, "\\d{4}")

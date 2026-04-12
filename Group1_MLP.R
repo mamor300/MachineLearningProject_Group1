@@ -1,6 +1,7 @@
 setwd("/Users/mattamor/MachineLearningProject_Group1")
 
 install.packages("tidycensus")
+install.packages("randomForest")
 
 pacman::p_load(
   readr,
@@ -10,7 +11,8 @@ pacman::p_load(
   VIM,
   caret,
   missMDA,
-  tidycensus)
+  tidycensus,
+  randomForest)
 
 #1. 
 {
@@ -108,8 +110,7 @@ CFPB3 <- CFPB2 |>
          Submitted.via                = as.factor(Submitted.via),
          Company.response.to.consumer = as.factor(Company.response.to.consumer),
          Timely.response.             = as.factor(Timely.response.),
-         ZIP.missing                  = ifelse(nchar(ZIP) < 5 | grepl("XX$", ZIP), 1, 0),
-         missing                      = as.numeric(ifelse(!complete.cases(CFPB2),1,0)))|>
+         ZIP.missing                  = ifelse(nchar(ZIP) < 5 | grepl("XX$", ZIP), 1, 0))|>
   left_join(ZIPCODES |> select(ZIP, FIPS), by = "ZIP")|>
   relocate(c(ZIP,ZIP.missing,FIPS),.after = State)|>
   mutate(FIPS = as.factor(FIPS))|>
@@ -119,20 +120,71 @@ CFPB3 <- CFPB2 |>
          Pub.response  = Company.public.response,
          Consent       = Consumer.consent.provided.,
          Timely        = Timely.response.)|>
-  mutate(Wait.time = as.numeric(Sent - Received)) |>
   select(-Product,
          -Sub.product,
          -Consumer.disputed.,
          -Consumer.complaint.narrative,
          -ZIP.Imputed,
          -ZIP.code)|>
+  mutate(Wait.time = as.numeric(Sent - Received))|>
   select(Relief, Received, Sent, Year, Wait.time,everything())
 # Verifying that the only incomplete cases are ones which did not impute
+CFPB3 <- CFPB3 |>
+  mutate(missing   = as.numeric(ifelse(!complete.cases(CFPB3),1,0))) 
 # summary(!complete.cases(CFPB3))
+# summary(is.na(CFPB3$ZIP))
 }
 #4.
 {
-
+  # Medical debt
+  med_debt_raw <- read_excel("changing_med_debt_landscape_county.xlsx", 
+                             sheet = 1,
+                             .name_repair = "universal")
+  
+  # Cleaning
+  med_debt_clean <- med_debt_raw %>%
+    mutate(
+      Year = as.factor(Year),
+      FIPS = as.factor(str_pad(as.character(County.Fips), 5, "left", pad = "0")),
+      "Share.with.medical.debt.in.collections"                          = as.numeric(Share.with.medical.debt.in.collections),                   
+      "Median.medical.debt.in.collections.in..2023"                     = as.numeric(Median.medical.debt.in.collections.in..2023),                 
+      "Share.with.medical.debt.in.collections...Majority.White"         = as.numeric(Share.with.medical.debt.in.collections...Majority.White),        
+      "Median.medical.debt.in.collections.in..2023...Majority.White"    = as.numeric(Median.medical.debt.in.collections.in..2023...Majority.White),   
+      "Share.with.medical.debt.in.collections...Majority.of.Color"      = as.numeric(Share.with.medical.debt.in.collections...Majority.of.Color),
+      "Median.medical.debt.in.collections.in..2023...Majority.of.Color" = as.numeric(Median.medical.debt.in.collections.in..2023...Majority.of.Color),
+      "Hospital.market.concentration..HHI."                             = as.numeric(Hospital.market.concentration..HHI.),
+      "Number.of.Closures.and.Mergers"                                  = as.numeric(Number.of.Closures.and.Mergers),
+      "Share.of.the.population.with.no.health.insurance.coverage"       = as.numeric(Share.of.the.population.with.no.health.insurance.coverage),
+      "Share.of.non.elderly.adults.with.a.reported.disability"          = as.numeric(Share.of.non.elderly.adults.with.a.reported.disability),
+      "Average.household.income.in..2023"                               = as.numeric(Average.household.income.in..2023),
+    ) %>%
+    # removing redundant variables, and ones missing more than 30%
+    select(-c(County.Fips,
+              State.Abbreviation,
+              County.Name,
+              Median.medical.debt.in.collections.in..2023...Majority.of.Color,
+              Share.with.medical.debt.in.collections...Majority.of.Color,
+              Median.medical.debt.in.collections.in..2023...Majority.White,
+              Median.medical.debt.in.collections.in..2023))
+  # Median impute for missing 2024 and 2025 years
+  median_cols <- setdiff(names(med_debt_clean), c("Year", "FIPS"))
+  new_rows <- med_debt_clean %>%
+    group_by(FIPS) %>%
+    summarise(across(all_of(median_cols), \(x) median(x, na.rm = TRUE)), .groups = "drop")
+  
+  # Duplicate for 2024 and 2025
+  new_rows_2024 <- new_rows %>% mutate(Year = as.factor(2024))
+  new_rows_2025 <- new_rows %>% mutate(Year = as.factor(2025))
+  
+  # Combine with original data
+  med_debt_clean <- bind_rows(med_debt_clean, new_rows_2024, new_rows_2025) %>%
+    arrange(FIPS, Year)
+  # Left join
+  CFPB4 <- CFPB3 %>%
+    left_join(med_debt_clean, by = c("FIPS", "Year"))
+  mean(!complete.cases(CFPB4))
+  # median impute for remaining missing values (about 17% of medical debt)
+  CFPB4 <- na.roughfix(CFPB4[22:28])
 }
 #5.
 {
@@ -202,7 +254,7 @@ DebtMetrics <- OverallDebt |>
 DebtMetrics.clean <- DebtMetrics |>
   mutate(across(-c(`County Name`,FIPS,`State Name`),~ as.numeric(gsub(",", "", .x))))
 
-# Joining CFPB and Debt data for inspection
+# Joining CFPB and Debt data
 CFPB6 <- CFPB5 |>
   left_join(DebtMetrics.clean |>
               select(-`County Name`,-`State Name`),
@@ -267,7 +319,6 @@ INSECURE2 <- INSECURE1 |>
   rename(FIPS = GEOID)
 
 # Joining credit insecurity data with CFPB
-## The only years of overlap are 2022 and 2023. This filters everything else out
 CFPB7 <- CFPB6 |>
   left_join(INSECURE2 |>
               select(-`County Name`,-State),
@@ -409,7 +460,7 @@ CFPB8 <- CFPB.FMR %>%
   left_join(all_bps_years_clean, by = c("FIPS", "Year"))
 
 #Verify the results 
-# This shoudl show the counts for each year 
+# This should show the counts for each year 
 table(CFPB8$Year)
 }
 #9.
@@ -562,4 +613,8 @@ scores <- as.data.frame(DebtMetrics.pca$x[,1:4]) |>
 # Joining section 10 with full CFPB dataset, and removing all but Census variables
 CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
   left_join(scores,by="FIPS")
+}
+#11.
+{
+  
 }
