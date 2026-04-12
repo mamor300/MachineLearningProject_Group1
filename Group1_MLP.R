@@ -130,6 +130,10 @@ CFPB3 <- CFPB2 |>
 # Verifying that the only incomplete cases are ones which did not impute
 # summary(!complete.cases(CFPB3))
 }
+#4.
+{
+
+}
 #5.
 {
 #Adding Fed measure for household debt by county 
