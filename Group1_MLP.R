@@ -129,7 +129,8 @@ CFPB3 <- CFPB2 |>
          -Consumer.disputed.,
          -Consumer.complaint.narrative,
          -ZIP.Imputed,
-         -ZIP.code)|>
+         -ZIP.code,
+         -ZIP.missing)|>
   mutate(Wait.time = as.numeric(Sent - Received))|>
   select(Relief, Received, Sent, Year, Wait.time,everything())
 # Verifying that the only incomplete cases are ones which did not impute
@@ -186,9 +187,9 @@ CFPB3 <- CFPB3 |>
   # Left join
   CFPB4 <- CFPB3 %>%
     left_join(med_debt_clean, by = c("FIPS", "Year"))
-  mean(!complete.cases(CFPB4))
+  colMeans(is.na(CFPB4))
   # median impute for remaining missing values (about 17% of medical debt)
-  CFPB4 <- na.roughfix(CFPB4[22:28])
+  CFPB4 <- na.roughfix(CFPB4[20:26])
 }
 #5.
 {
@@ -572,7 +573,7 @@ CFPB9 <- CFPB.dummies %>%
 ## There is severe missingness in this dataset
 
 # Setting neighborhoods as row names
-## You'll see a warning for 49 NAs introduced. This is by design
+## You'll see 49 warnings for NAs introduced. This is by design
 DebtMetrics1 <- DebtMetrics[,-c(1:3)]
 DMClean <- DebtMetrics1 |>
   mutate(across(everything(),~ as.numeric(gsub(",", "", .x))))
@@ -640,8 +641,57 @@ Cumulative.pca |>
 scores <- as.data.frame(DebtMetrics.pca$x[,1:4]) |>
   mutate(FIPS = DebtMetrics[[1]])
 
+CFPB.nocensus <- c(
+  'Share with any debt in collections, All',
+  'Share with any debt in collections, Comm of color',
+  'Share with any debt in collections, White comm',
+  'Median debt in collections, All',
+  'Median debt in collections, Comm of color',
+  'Median debt in collections, White comm',
+  'Share with medical debt in collections, All',
+  'Share with medical debt in collections, Comm of color',
+  'Share with medical debt in collections, White comm',
+  'Student loan delinquency rate (60+), All',
+  'Student loan delinquency rate (60+), Comm of color',
+  'Student loan delinquency rate (60+), White comm',
+  'Auto/retail loan delinquency rate, All',
+  'Auto/retail loan delinquency rate, Comm of color',
+  'Auto/retail loan delinquency rate, White comm',
+  'Credit card debt delinquency rate, All',
+  'Credit card debt delinquency rate, Comm of color',
+  'Credit card debt delinquency rate, White comm',
+  'Median credit card delinquent debt, All',
+  'Median credit card delinquent debt, Comm of color',
+  'Median credit card delinquent debt, White comm',
+  'Auto/retail loan delinquency rate by credit score - Subprime, All',
+  'Auto/retail loan delinquency rate by credit score - Near prime, All',
+  'Auto/retail loan delinquency rate by credit score - Prime, All',
+  'Share with auto loans, All',
+  'Share with auto loans, Comm of color',
+  'Share with auto loans, White comm',
+  'Share with auto/retail loan debt, All',
+  'Share with auto/retail loan debt, Comm of color',
+  'Share with auto/retail loan debt, White comm',
+  'Share of people in rural areas, White comm',
+  'Share with student loan debt, All',
+  'Share with student loan debt, Comm of color',
+  'Share with student loan debt, White comm',
+  'Median student loan debt, All',
+  'Median student loan debt, Comm of color',
+  'Median student loan debt, White comm',
+  'Median student loan deliquent debt, All',
+  'Median student loan deliquent debt, Comm of color',
+  'Median student loan deliquent debt, White comm',
+  'Median monthly student loan payment, All',
+  'Median monthly student loan payment, Comm of color',
+  'Median monthly student loan payment, White comm'
+)
+
+
 # Joining section 10 with full CFPB dataset, and removing all but Census variables
-CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
+CFPB10 <- CFPB9 |>
+  select(-all_of(CFPB.nocensus),
+         -County_Name)|>
   left_join(scores,by="FIPS")
 }
 #11.
@@ -691,11 +741,14 @@ CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
 #random forest imputation
 set.seed(12345)
 sapply(CFPB11, class)
-CFPBimpute <- CFPB11 %>%
-  mutate(across(where(is.character), as.factor))%>%
-  mutate(across(where(is.logical), as.factor))%>%
-  mutate(across(where(~ inherits(., "Date")), as.numeric))
-sapply(CFPBimpute[sapply(CFPBimpute, is.factor)], nlevels) %>% 
+CFPB.mutate <- CFPB11 %>%
+  mutate(across(where(is.character), as.factor),
+         across(where(is.logical), as.factor),
+         across(where(~ inherits(., "Date")), as.numeric),
+         `CI Index Score`= as.numeric(`CI Index Score`),
+         `Not Credit Included` = as.numeric(`Not Credit Included`),
+         `Credit Constrained` = as.numeric(`Credit Constrained`))
+sapply(CFPB.mutate[sapply(CFPB.mutate, is.factor)], nlevels) %>% 
   sort(decreasing = TRUE) %>% 
   head(20)
 #all of these had more than 53 categories (alot more) so I dropped them
@@ -703,15 +756,11 @@ sapply(CFPBimpute[sapply(CFPBimpute, is.factor)], nlevels) %>%
 drop_cols_CFPB <- c(
   "ZIP",
   "FIPS",
-  "Company",
-  "County_Name",
-  "CI Index Score",
-  "Not Credit Included",
-  "Credit Constrained"
+  "Company"
   )
-CFPBimpute <- CFPBimpute %>%
-  select(-all_of(drop_cols_CFPB)) %>%
-  mutate(across(where(is.character), as.factor))
+CFPBimpute <- CFPB.mutate[,!names(CFPB.mutate) %in% drop_cols_CFPB]
+CFPBheldout <- CFPB.mutate[,names(CFPB.mutate) %in% drop_cols_CFPB]
+
 CFPBimpute$Received <- as.numeric(CFPBimpute$Received)
 CFPBimpute$Sent <- as.numeric(CFPBimpute$Sent)
 CFPBimpute$qtr <- as.numeric(CFPBimpute$qtr)
@@ -799,7 +848,9 @@ for (col in na_cols) {
   
   CFPBimpute_out[[col]][missing_idx] <- predict(rf_model, newdata = newdata)
 }
+CFPB <- cbind(CFPBimpute_out,CFPBheldout)
 }
-CFPB <- CFPBimpute_out
-rm(list = setdiff(ls(), "CFPB"))
-gc()
+
+# rm(list = setdiff(ls(), "CFPB"))
+# gc()
+
