@@ -1,4 +1,4 @@
-setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 - Machines/DataProject/MachineLearningProject_Group1')
+setwd("/Users/mattamor/MachineLearningProject_Group1")
 
 install.packages("tidycensus")
 
@@ -207,20 +207,69 @@ CFPB6 <- CFPB5 |>
 #7.
 {
 INSECURE0 <- read_xlsx("Question07/credit-insecurity-index-data-workbook.xlsx", sheet = "County")
-INSECURE <- INSECURE0 |>
-  pivot_longer(cols = "2018":"2023",
+tier_lookup <- c(
+    "Credit At Risk"  = 1,
+    "Credit Insecure" = 2,   # <-- double-check this
+    "Mid-Tier"        = 3,
+    "Credit Likely"   = 4,
+    "Credit Assured"  = 5
+  )
+year_cols <- as.character(2018:2023)
+
+tier_numeric_rows <- INSECURE0 %>%
+  filter(`Credit Insecurity Measure` == "Credit Tier") %>%
+  mutate(`Credit Insecurity Measure` = "Credit Tier - Numeric",
+         across(all_of(year_cols), ~ as.character(tier_lookup[as.character(.)])))
+county_with_numeric <- INSECURE0 %>%
+  bind_rows(tier_numeric_rows) %>%
+  arrange(GEOID, factor(`Credit Insecurity Measure`, 
+                        levels = c("Credit Tier", 
+                                   "Credit Tier - Numeric",
+                                   "CI Index Score", 
+                                   "Not Credit Included", 
+                                   "Credit Constrained")))
+tier_rows <- county_with_numeric %>%
+  filter(`Credit Insecurity Measure` == "Credit Tier") %>%
+  mutate(`2024` = NA_character_,
+         `2025` = NA_character_)
+
+numeric_rows <- county_with_numeric %>%
+  filter(`Credit Insecurity Measure` != "Credit Tier") %>%
+  mutate(across(all_of(year_cols), ~ suppressWarnings(as.numeric(.)))) %>%
+  rowwise() %>%
+  mutate(
+    `2024` = round(mean(c_across(all_of(year_cols)), na.rm = TRUE),1),
+    `2025` = `2024`
+  ) %>%
+  ungroup() %>%
+  mutate(across(c(`2024`, `2025`), as.character),
+         across(all_of(year_cols), as.character))
+
+INSECURE1 <- bind_rows(tier_rows, numeric_rows) %>%
+  arrange(GEOID, factor(`Credit Insecurity Measure`,
+                        levels = c("Credit Tier",
+                                   "Credit Tier - Numeric",
+                                   "CI Index Score",
+                                   "Not Credit Included",
+                                   "Credit Constrained")))
+
+INSECURE2 <- INSECURE1 |>
+  pivot_longer(cols = "2018":"2025",
                names_to = "Year",
                values_to = "value") |>
   mutate(Year = as.integer(Year))|>
   pivot_wider(names_from = `Credit Insecurity Measure`,
               values_from = value)|>
   rename(FIPS = GEOID)
+
 # Joining credit insecurity data with CFPB
 ## The only years of overlap are 2022 and 2023. This filters everything else out
 CFPB7 <- CFPB6 |>
-  left_join(INSECURE |>
+  left_join(INSECURE2 |>
               select(-`County Name`,-State),
-            by = c("FIPS","Year"))
+            by = c("FIPS","Year"))|>
+  mutate(`CreditTier` = round(as.numeric(`Credit Tier - Numeric`),0))|>
+  select(-c(`Credit Tier`,`Credit Tier - Numeric`))
 }
 #8.
 {
@@ -503,10 +552,10 @@ Cumulative.pca |>
         panel.grid.major.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Joining PCs with full dataset
 scores <- as.data.frame(DebtMetrics.pca$x[,1:4]) |>
   mutate(FIPS = DebtMetrics[[1]])
 
-CFPB10 <- CFPB9 |>
+# Joining section 10 with full CFPB dataset, and removing all but Census variables
+CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
   left_join(scores,by="FIPS")
 }
