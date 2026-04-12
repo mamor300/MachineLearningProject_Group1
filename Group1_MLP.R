@@ -32,7 +32,8 @@ CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in%
                        "Closed with non-monetary relief"),
                     1,0)
 CFPB0 <- CFPB0[,-c(1)]|>
-  select(Relief,Date.received, Date.sent.to.company,everything())
+  select(Relief,Date.received, Date.sent.to.company,everything())|>
+  select(-Company.response.to.consumer)
 
 # Dropping Observations
 ## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
@@ -627,7 +628,7 @@ CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
   #"WI", "NC")
   
   #CFPB$rep_legislature <- as.factor(ifelse(CFPB$State %in% republican_states, 1, 0))
-  matrix1 <- bind_cols(c(CFPB10[,c("PC1", "Year", "Issue")], CFPB10[,c("Share of people of color")], CFPB_Census[,c("prop_young", "prop_65plus")]))
+  matrix1 <- bind_cols(c(CFPB10[,c("PC1", "Year", "Issue","Share of people of color","prop_young", "prop_65plus")]))
   CFPB_clust<- matrix1
   #I tried adding the variables I got from sahie but it made the lambda so large I don't think it's worth it (498314632027)
   #CFPB_clust$is_servicemember <- as.factor(CFPB_clust$is_servicemember)
@@ -651,8 +652,8 @@ CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
   #col = wes_palette("Royal1", 5, type = "continuous")) # figure 1
   plot(kpres)
   #Save cluster assignments
-  CFPB$cluster <- NA
-  CFPB$cluster[complete_idx] <- kpres$cluster
-  CFPB$cluster <- as.factor(CFPB$cluster)
+  CFPB10$cluster <- NA
+  CFPB10$cluster[complete_idx] <- kpres$cluster
+  CFPB10$cluster <- as.factor(CFPB10$cluster)
   
 }
