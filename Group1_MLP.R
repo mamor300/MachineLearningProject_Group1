@@ -627,7 +627,7 @@ CFPB10 <- CFPB9[,-c(25:45,50:58,60:71)] |>
   #"WI", "NC")
   
   #CFPB$rep_legislature <- as.factor(ifelse(CFPB$State %in% republican_states, 1, 0))
-  matrix1 <- bind_cols(c(CFPB10[,c("PC1", "Year", "Issue")], CFPB.debt[,c("Share of people of color")], CFPB_Census[,c("prop_young", "prop_65plus")]))
+  matrix1 <- bind_cols(c(CFPB10[,c("PC1", "Year", "Issue")], CFPB10[,c("Share of people of color")], CFPB_Census[,c("prop_young", "prop_65plus")]))
   CFPB_clust<- matrix1
   #I tried adding the variables I got from sahie but it made the lambda so large I don't think it's worth it (498314632027)
   #CFPB_clust$is_servicemember <- as.factor(CFPB_clust$is_servicemember)
