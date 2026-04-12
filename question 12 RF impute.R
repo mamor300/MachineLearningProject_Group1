@@ -69,16 +69,16 @@ cols_to_convert <- c(
   "Median medical debt in collections in $2023 - Majority White",
   "Median medical debt in collections in $2023 - Majority of Color",
   "Share with medical debt in collections - Majority White",
-  "Share with medical debt in collections - Majority of Color"
+  "Share with medical debt in collections - Majority of Color",
+  "Median medical debt in collections in $2023"
 )
-
 CFPBimpute <- CFPBimpute %>%
   mutate(across(all_of(cols_to_convert), ~ as.numeric(as.character(.x))))
 #since rfImpute cant impute y and y is what we want to predict in the future I'm going to do a median imputation on y and random forest on everything else
-pre_median <- preProcess(CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE], 
-                         method = "medianImpute")
-imputedmeddebt <- predict(pre_median, CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE])
-CFPBimpute$`Median medical debt in collections in $2023` <- imputedmeddebt[[1]]
+#pre_median <- preProcess(CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE], 
+                         #method = "medianImpute")
+#imputedmeddebt <- predict(pre_median, CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE])
+#CFPBimpute$`Median medical debt in collections in $2023` <- imputedmeddebt[[1]]
 #hitting vector ceiling on everything need to take a sample
 #CFPBimpute <- rfImpute(`Median medical debt in collections in $2023` ~ ., iter = 3, ntree = 20, 
                        #maxnodes = 50, data = CFPBimpute)
@@ -94,7 +94,7 @@ set.seed(12345)
 idx <- sample(nrow(CFPBimpute), 10000)
 CFPBsample <- CFPBimpute[idx, ]
 CFPBsample_imputed <- rfImpute(
-  `Median medical debt in collections in $2023` ~ .,
+  Relief ~ .,
   iter     = 3,
   ntree    = 20,
   maxnodes = 50,
