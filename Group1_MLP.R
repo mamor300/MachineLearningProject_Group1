@@ -35,7 +35,6 @@ CFPB0$Relief<- ifelse(CFPB0$Company.response.to.consumer %in%
                     1,0)
 CFPB0 <- CFPB0[,-c(1)]|>
   select(Relief,Date.received, Date.sent.to.company,everything())
-  #select(-Company.response.to.consumer)
 
 # Dropping Observations
 ## Dropping 134 rows (<0.3% of total) have NA values across 12 variables in original data 
@@ -112,7 +111,6 @@ CFPB3 <- CFPB2 |>
          Tags                         = as.factor(Tags),
          Consumer.consent.provided.   = as.factor(Consumer.consent.provided.),
          Submitted.via                = as.factor(Submitted.via),
-         Company.response.to.consumer = as.factor(Company.response.to.consumer),
          Timely.response.             = as.factor(Timely.response.),
          ZIP.missing                  = ifelse(nchar(ZIP) < 5 | grepl("XX$", ZIP), 1, 0))|>
   left_join(ZIPCODES |> select(ZIP, FIPS), by = "ZIP")|>
@@ -120,7 +118,6 @@ CFPB3 <- CFPB2 |>
   mutate(FIPS = as.factor(FIPS))|>
   rename(Received      = Date.received,
          Sent          = Date.sent.to.company,
-         Cust.response = Company.response.to.consumer,
          Pub.response  = Company.public.response,
          Consent       = Consumer.consent.provided.,
          Timely        = Timely.response.)|>
@@ -130,7 +127,8 @@ CFPB3 <- CFPB2 |>
          -Consumer.complaint.narrative,
          -ZIP.Imputed,
          -ZIP.code,
-         -ZIP.missing)|>
+         -ZIP.missing,
+         -Company.response.to.consumer)|>
   mutate(Wait.time = as.numeric(Sent - Received))|>
   select(Relief, Received, Sent, Year, Wait.time,everything())
 # Verifying that the only incomplete cases are ones which did not impute
