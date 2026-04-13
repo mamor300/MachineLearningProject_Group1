@@ -1,5 +1,4 @@
-setwd('/Users/mattamor/Library/CloudStorage/OneDrive-Personal/School/ECON 6378 - Machines/DataProject/MachineLearningProject_Group1')
-
+setwd('')
 library(tigris)
 library(ggplot2)
 library(dplyr)

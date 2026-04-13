@@ -65,16 +65,16 @@ valid_zips <- ZIPCODES |>
   select(prefix3, ZIP.char, ZIP.num)
 
 # Computing means for each 3-digit prefix
-ZIP.means <- df |>
+ZIP.medians <- df |>
   filter(ZIP.missing == 0, nchar(trimws(ZIP.char)) == 5) |>
   group_by(prefix3) |>
-  summarise(ZIP.mean.num = round(mean(as.numeric(ZIP.char), na.rm = TRUE)))
+  summarise(ZIP.median.num = round(median(as.numeric(ZIP.char), na.rm = TRUE)))
 
-# Identifying the nearest valid zip for each mean value
+# Identifying the nearest valid zip for each median value
 ## ZIP.imp is 
-ZIP.impute <- ZIP.means |>
+ZIP.impute <- ZIP.medians |>
   left_join(valid_zips, by = "prefix3") |>
-  mutate(dist = abs(ZIP.num - ZIP.mean.num)) |>
+  mutate(dist = abs(ZIP.num - ZIP.median.num)) |>
   group_by(prefix3) |>
   slice_min(order_by = dist, n = 1, with_ties = FALSE) |>  
   select(prefix3, ZIP.imp = ZIP.char)
@@ -686,11 +686,11 @@ CFPB.nocensus <- c(
   'Median monthly student loan payment, Comm of color',
   'Median monthly student loan payment, White comm'
 )
-
+DebtMetrics.names <- names(DebtMetrics)[c(4:24,26:53)]
 
 # Joining section 10 with full CFPB dataset, and removing all but Census variables
 CFPB10 <- CFPB9 |>
-  select(-all_of(CFPB.nocensus),
+  select(-all_of(DebtMetrics.names),
          -County_Name)|>
   left_join(scores,by="FIPS")
 }
@@ -851,6 +851,5 @@ for (col in na_cols) {
 CFPB <- cbind(CFPBimpute_out,CFPBheldout)
 }
 
-# rm(list = setdiff(ls(), "CFPB"))
-# gc()
-
+rm(list = setdiff(ls(), "CFPB"))
+gc()
