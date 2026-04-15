@@ -49,19 +49,17 @@ table(StateCheck$state_match, useNA = "ifany")
 # Creating a dataframe with all the obs that failed to impute
 try <- CFPB2[is.na(CFPB2$ZIP.missing),]
 
-#2
+
 # Imputing with K Nearest Neighbors
-## result is a 1.8% mismatch between prefix of imputed values and original ZIP.code
-## No NAs and 35 cases of state mismatch
-# Step 1: Flag missing ZIPs (same as before, but on CFPB1)
+# Flaggingg missing ZIPs in a separate df
 df <- CFPB1 %>%
   mutate(ZIP.char    = as.character(ZIP.code),
          prefix3     = substr(ZIP.char, 1, 3),
          ZIP.missing = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
          ZIP.num     = ifelse(ZIP.missing == 0, as.numeric(ZIP.char), NA))
 
-# Step 2: Build KNN dataframe using only original columns
-# State is by far the strongest predictor here without prefix3
+# Building a dataframe that KNN can run on using only original columns
+## Limiting factors that might effect imputation to ones that are location-based
 knn_df <- df %>%
   mutate(
     State       = as.factor(State),
@@ -70,35 +68,104 @@ knn_df <- df %>%
   ) %>%
   dplyr::select(ZIP.num, State, Company, prefix3)
 
-# Step 3: Run KNN imputation
+# Running KNN imputation
 knn_result <- kNN(knn_df, variable = "ZIP.num", k = 5)
 
-# Step 3.5: creating valid_zips 
+# Creating valid_zips df for reference 
 valid_zips <- ZIPCODES %>%
   mutate(ZIP.char   = formatC(as.numeric(ZIP), width = 5, flag = "0", format = "d"),
          prefix3    = substr(ZIP.char, 1, 3),
          ZIP.num    = as.numeric(ZIP.char)) %>%
-  dplyr::select(prefix3, ZIP.char, ZIP.num)
+  select(prefix3, ZIP.char, ZIP.num)
 
-# Step 4: Snap to nearest valid ZIP in ZIPCODES
+# Building a function to snap to nearest prefix and valid ZIP in ZIPCODES
 valid_zips_vec <- valid_zips$ZIP.num  # numeric vector for fast lookup
 
-snap_to_valid <- function(zip_num) {
-  valid_zips$ZIP.char[which.min(abs(valid_zips_vec - zip_num))]
+snap_to_valid <- function(zip_num, prefix = NULL) {
+  if (!is.null(prefix) && nchar(prefix) == 3) {
+    candidates <- valid_zips[valid_zips$prefix3 == prefix, ]
+  } else {
+    candidates <- valid_zips  # fallback: no prefix restriction
+  }
+  
+  if (nrow(candidates) == 0) {
+    candidates <- valid_zips
+  }
+  
+  candidates$ZIP.char[which.min(abs(candidates$ZIP.num - zip_num))]
 }
 
-# Step 5: Build comparison dataframe
-CFPB.compare <- df %>%
+# Joining imputed ZIP codes with full dataset
+CFPB2 <- df %>%
   mutate(ZIP.knn.raw = round(knn_result$ZIP.num)) %>%
   rowwise() %>%
-  mutate(ZIP.knn = snap_to_valid(ZIP.knn.raw)) %>%
+  mutate(
+    ZIP.knn = if (ZIP.missing == 1) {
+      snap_to_valid(ZIP.knn.raw, prefix = prefix3)  
+    } else {
+      snap_to_valid(ZIP.knn.raw)                     
+    }
+  ) %>%
   ungroup() %>%
   mutate(ZIP.knn.ch = as.character(ZIP.knn),
          ZIP.missing = ifelse(nchar(ZIP.knn) < 5 | grepl("X$", ZIP.knn), 1, 0),
          ZIP.knn = as.factor(ZIP.knn.ch),
          ZIP.match = as.numeric(substr(ZIP.knn.ch, 1, 3) != substr(ZIP.code, 1, 3))) %>%
-  dplyr::select(-c(ZIP.char, ZIP.knn.raw))%>%
-  dplyr::select(c(State,ZIP.code,ZIP.knn,ZIP.num,ZIP.match,everything()))
+  left_join(ZIPCODES[,c(2,4)],join_by("ZIP.knn.ch"=="ZIP"))%>%
+  mutate(ZIP.state.match = ifelse(STATE==State,0,1))%>%
+  select(c(Relief,State,ZIP.knn,everything()))%>%
+  select(-c('ZIP.match',
+            'ZIP.missing',
+            'ZIP.code',
+            'ZIP.knn.ch',
+            'STATE',
+            'ZIP.num',
+            'prefix3',
+            'ZIP.state.match','ZIP.match',
+            'ZIP.missing',
+            'ZIP.code',
+            'ZIP.knn.ch',
+            'STATE',
+            'ZIP.num',
+            'prefix3',
+            'ZIP.state.match',
+            'ZIP.char',
+            'ZIP.knn.raw'))
+}
+#3.
+{
+  ## First major cleaning of CFPB data
+  CFPB3 <- CFPB2 |>
+    mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
+           Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
+           Year                         = as.factor(year(Date.received)),
+           Issue                        = as.factor(Issue),
+           Sub.issue                    = as.factor(Sub.issue),
+           Company.public.response      = as.factor(Company.public.response),
+           Company                      = as.factor(Company),
+           State                        = as.factor(State),
+           Tags                         = as.factor(Tags),
+           Consumer.consent.provided.   = as.factor(Consumer.consent.provided.),
+           Submitted.via                = as.factor(Submitted.via),
+           Timely.response.             = as.factor(Timely.response.),
+           ZIP                          = ZIP.knn)|>
+    left_join(ZIPCODES |> select(ZIP, FIPS), by = "ZIP")|>
+    relocate(c(ZIP,FIPS),.after = State)|>
+    mutate(FIPS = as.factor(FIPS))|>
+    rename(Received      = Date.received,
+           Sent          = Date.sent.to.company,
+           Pub.response  = Company.public.response,
+           Consent       = Consumer.consent.provided.,
+           Timely        = Timely.response.)|>
+    select(-Product,
+           -Sub.product,
+           -Consumer.disputed.,
+           -Consumer.complaint.narrative,
+           -ZIP.knn,
+           -Company.response.to.consumer)|>
+    mutate(Wait.time = as.numeric(Sent - Received))|>
+    select(Relief, Received, Sent, Year, Wait.time,everything())
+}
 
 # Playing around with zip code maps
 ## Beyond the scope of this project
