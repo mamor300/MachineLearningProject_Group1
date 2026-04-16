@@ -1,0 +1,120 @@
+>     summary(logit_model)
+Large data regression model: bigglm(Relief ~ Wait.time + Year + qtr + PC1 + PC2 + PC3 + PC4 + 
+    cluster + `Share of people of color` + `CI Index Score` + 
+    `Not Credit Included` + `Credit Constrained` + CreditTier + 
+    Studio_fmr + OneRoom_fmr + TwoRoom_fmr + ThreeRoom_fmr + 
+    FourRoom_fmr + Permit_Units + Permit_Valuation + pct_bach_degree + 
+    is_servicemember + is_older_american + prop_young + prop_65plus + 
+    prop_female + prop_hispanic + prop_black + prop_black_fem + 
+    is_older_county + has_pub_response + has_tags + Company_grp + 
+    Submitted.via + is_timely + Consent_clean, data = df, family = binomial(), 
+    maxit = 50)
+Sample size =  61656 
+                                                       Coef      (95%       CI)      SE
+(Intercept)                                       -251.4453 -298.7982 -204.0924 23.6765
+Wait.time                                           -0.0114   -0.0146   -0.0082  0.0016
+Year                                                 0.1230    0.0996    0.1464  0.0117
+qtr                                                  0.0072   -0.0108    0.0252  0.0090
+PC1                                                  0.0029   -0.0236    0.0293  0.0132
+PC2                                                 -0.0012   -0.0232    0.0208  0.0110
+PC3                                                  0.0011   -0.0283    0.0305  0.0147
+PC4                                                 -0.0038   -0.0268    0.0193  0.0115
+cluster2                                            -0.0700   -0.2294    0.0893  0.0797
+cluster3                                             0.0022   -0.1088    0.1132  0.0555
+cluster4                                             0.0182   -0.2005    0.2369  0.1094
+cluster5                                             0.0312   -0.1245    0.1870  0.0779
+`Share of people of color`                           0.1501   -0.2601    0.5602  0.2051
+`CI Index Score`                                     0.0000   -0.0002    0.0003  0.0001
+`Not Credit Included`                               -0.0001   -0.0003    0.0001  0.0001
+`Credit Constrained`                                 0.0000   -0.0004    0.0004  0.0002
+CreditTier                                          -0.0046   -0.0346    0.0255  0.0150
+Studio_fmr                                           0.0001   -0.0003    0.0004  0.0002
+OneRoom_fmr                                          0.0001   -0.0005    0.0007  0.0003
+TwoRoom_fmr                                          0.0001   -0.0004    0.0007  0.0003
+ThreeRoom_fmr                                       -0.0002   -0.0005    0.0002  0.0002
+FourRoom_fmr                                         0.0000   -0.0002    0.0002  0.0001
+Permit_Units                                         0.0007   -0.0004    0.0019  0.0006
+Permit_Valuation                                    -0.0007   -0.0018    0.0004  0.0006
+pct_bach_degree                                      0.0005   -0.0033    0.0042  0.0019
+is_servicemember                                    -0.2270   -0.4926    0.0387  0.1328
+is_older_american                                   -0.0902   -0.3393    0.1590  0.1246
+prop_young                                           0.0664    0.0055    0.1274  0.0305
+prop_65plus                                          0.0247   -0.0397    0.0891  0.0322
+prop_female                                          0.0129   -0.0808    0.1065  0.0468
+prop_hispanic                                       -0.0600   -0.1343    0.0144  0.0372
+prop_black                                          -0.0584   -0.6472    0.5303  0.2944
+prop_black_fem                                       0.0150   -0.5666    0.5966  0.2908
+is_older_county                                      0.1145    0.0456    0.1835  0.0345
+has_pub_response                                    -0.1429   -0.2196   -0.0662  0.0384
+has_tags                                             0.0842   -0.1925    0.3609  0.1383
+Company_grpCITIBANK, N.A.                            1.0331    0.8750    1.1913  0.0791
+Company_grpCL Holdings LLC                          -4.0841   -4.8476   -3.3205  0.3818
+Company_grpENCORE CAPITAL GROUP INC.                 1.3410    1.2347    1.4473  0.0532
+Company_grpEQUIFAX, INC.                             1.4498    1.3238    1.5758  0.0630
+Company_grpExperian Information Solutions Inc.      -0.2677   -0.4305   -0.1049  0.0814
+Company_grpOther                                    -0.2644   -0.3672   -0.1617  0.0514
+Company_grpPortfolio Recovery Associates, LLC        0.7063    0.5972    0.8154  0.0546
+Company_grpResurgent Capital Services L.P.           0.1974    0.0892    0.3056  0.0541
+Company_grpSYNCHRONY FINANCIAL                       0.1700   -0.0023    0.3422  0.0861
+Company_grpTRANSUNION INTERMEDIATE HOLDINGS, INC.    2.9139    2.7576    3.0701  0.0781
+Submitted.viaPostal mail                             0.2187   -0.2206    0.6580  0.2197
+Submitted.viaReferral                                0.2260   -0.1612    0.6133  0.1936
+Submitted.viaWeb                                     0.3880    0.1970    0.5791  0.0955
+Submitted.viaWeb Referral                            0.3016   -1.0586    1.6618  0.6801
+is_timely                                            0.5557    0.3038    0.8077  0.1260
+Consent_cleanProvided                               -0.0571   -0.0981   -0.0162  0.0205
+Consent_cleanWithdrawn                              -0.2455   -0.6365    0.1454  0.1955
+                                                       p
+(Intercept)                                       0.0000
+Wait.time                                         0.0000
+Year                                              0.0000
+qtr                                               0.4238
+PC1                                               0.8283
+PC2                                               0.9165
+PC3                                               0.9403
+PC4                                               0.7447
+cluster2                                          0.3796
+cluster3                                          0.9685
+cluster4                                          0.8680
+cluster5                                          0.6884
+`Share of people of color`                        0.4643
+`CI Index Score`                                  0.7308
+`Not Credit Included`                             0.1612
+`Credit Constrained`                              0.8882
+CreditTier                                        0.7619
+Studio_fmr                                        0.6207
+OneRoom_fmr                                       0.7750
+TwoRoom_fmr                                       0.6232
+ThreeRoom_fmr                                     0.3060
+FourRoom_fmr                                      0.9234
+Permit_Units                                      0.1772
+Permit_Valuation                                  0.1881
+pct_bach_degree                                   0.8098
+is_servicemember                                  0.0875
+is_older_american                                 0.4692
+prop_young                                        0.0293
+prop_65plus                                       0.4429
+prop_female                                       0.7837
+prop_hispanic                                     0.1067
+prop_black                                        0.8426
+prop_black_fem                                    0.9589
+is_older_county                                   0.0009
+has_pub_response                                  0.0002
+has_tags                                          0.5429
+Company_grpCITIBANK, N.A.                         0.0000
+Company_grpCL Holdings LLC                        0.0000
+Company_grpENCORE CAPITAL GROUP INC.              0.0000
+Company_grpEQUIFAX, INC.                          0.0000
+Company_grpExperian Information Solutions Inc.    0.0010
+Company_grpOther                                  0.0000
+Company_grpPortfolio Recovery Associates, LLC     0.0000
+Company_grpResurgent Capital Services L.P.        0.0003
+Company_grpSYNCHRONY FINANCIAL                    0.0484
+Company_grpTRANSUNION INTERMEDIATE HOLDINGS, INC. 0.0000
+Submitted.viaPostal mail                          0.3194
+Submitted.viaReferral                             0.2431
+Submitted.viaWeb                                  0.0000
+Submitted.viaWeb Referral                         0.6574
+is_timely                                         0.0000
+Consent_cleanProvided                             0.0052
+Consent_cleanWithdrawn                            0.2091
