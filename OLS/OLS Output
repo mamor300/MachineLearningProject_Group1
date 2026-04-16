@@ -1,0 +1,118 @@
+Output: 
+> summary(model)
+Large data regression model: biglm(Relief ~ Wait.time + Year + qtr + PC1 + PC2 + PC3 + PC4 + 
+    cluster + `Share of people of color` + `CI Index Score` + 
+    `Not Credit Included` + `Credit Constrained` + CreditTier + 
+    Studio_fmr + OneRoom_fmr + TwoRoom_fmr + ThreeRoom_fmr + 
+    FourRoom_fmr + Permit_Units + Permit_Valuation + pct_bach_degree + 
+    is_servicemember + is_older_american + prop_young + prop_65plus + 
+    prop_female + prop_hispanic + prop_black + prop_black_fem + 
+    is_older_county + has_pub_response + has_tags + State + Company_grp + 
+    Submitted.via + Timely + Consent, data = df)
+Sample size =  61656 
+                                                      Coef     (95%      CI)     SE      p
+(Intercept)                                       -45.4844 -53.9873 -36.9816 4.2514 0.0000
+Wait.time                                          -0.0014  -0.0019  -0.0010 0.0002 0.0000
+Year                                                0.0224   0.0182   0.0267 0.0021 0.0000
+qtr                                                 0.0033   0.0003   0.0063 0.0015 0.0256
+PC1                                                 0.0028  -0.0021   0.0078 0.0025 0.2474
+PC2                                                 0.0010  -0.0031   0.0052 0.0021 0.6183
+PC3                                                -0.0015  -0.0073   0.0043 0.0029 0.6107
+PC4                                                -0.0027  -0.0080   0.0027 0.0027 0.3173
+cluster2                                           -0.0149  -0.0422   0.0124 0.0136 0.2755
+cluster3                                           -0.0021  -0.0210   0.0168 0.0095 0.8258
+cluster4                                            0.0016  -0.0354   0.0385 0.0185 0.9325
+cluster5                                            0.0028  -0.0238   0.0294 0.0133 0.8350
+`Share of people of color`                          0.0810  -0.0098   0.1717 0.0454 0.0745
+`CI Index Score`                                    0.0000   0.0000   0.0001 0.0000 0.6435
+`Not Credit Included`                               0.0000   0.0000   0.0000 0.0000 0.6184
+`Credit Constrained`                                0.0000  -0.0001   0.0001 0.0000 0.7477
+CreditTier                                         -0.0004  -0.0060   0.0052 0.0028 0.8911
+Studio_fmr                                          0.0000  -0.0001   0.0001 0.0000 0.7095
+OneRoom_fmr                                         0.0000  -0.0001   0.0001 0.0001 0.9688
+TwoRoom_fmr                                         0.0000  -0.0001   0.0001 0.0001 0.6400
+ThreeRoom_fmr                                       0.0000   0.0000   0.0001 0.0000 0.2194
+FourRoom_fmr                                        0.0000  -0.0001   0.0000 0.0000 0.3023
+Permit_Units                                        0.0002   0.0000   0.0004 0.0001 0.0335
+Permit_Valuation                                   -0.0002  -0.0004   0.0000 0.0001 0.0373
+pct_bach_degree                                    -0.0002  -0.0008   0.0005 0.0003 0.5986
+is_servicemember                                   -0.0320  -0.0724   0.0084 0.0202 0.1127
+is_older_american                                  -0.0096  -0.0471   0.0280 0.0188 0.6099
+prop_young                                          0.0143   0.0034   0.0251 0.0054 0.0087
+prop_65plus                                         0.0089  -0.0024   0.0202 0.0057 0.1168
+prop_female                                        -0.0007  -0.0176   0.0163 0.0085 0.9387
+prop_hispanic                                      -0.0193  -0.0350  -0.0035 0.0079 0.0143
+prop_black                                         -0.0074  -0.1158   0.1011 0.0542 0.8919
+prop_black_fem                                     -0.0056  -0.1110   0.0997 0.0527 0.9148
+is_older_county                                     0.0107  -0.0019   0.0234 0.0063 0.0898
+has_pub_response                                   -0.0205  -0.0314  -0.0096 0.0054 0.0002
+has_tags                                            0.0101  -0.0321   0.0523 0.0211 0.6327
+StateAL                                             0.0984  -0.0162   0.2130 0.0573 0.0859
+StateAR                                             0.1067  -0.0102   0.2236 0.0584 0.0679
+StateAZ                                             0.0586  -0.0548   0.1719 0.0567 0.3014
+StateCA                                             0.0838  -0.0260   0.1936 0.0549 0.1270
+StateCO                                             0.1088  -0.0057   0.2232 0.0572 0.0573
+StateCT                                             0.1209   0.0049   0.2369 0.0580 0.0371
+StateDE                                             0.0813  -0.0393   0.2019 0.0603 0.1778
+StateFL                                             0.1184   0.0072   0.2296 0.0556 0.0333
+StateGA                                             0.1219   0.0098   0.2341 0.0561 0.0297
+StateHI                                             0.0402  -0.0945   0.1750 0.0674 0.5505
+StateIA                                             0.1201  -0.0018   0.2419 0.0609 0.0487
+StateID                                             0.1153  -0.0131   0.2438 0.0642 0.0726
+StateIL                                             0.0966  -0.0152   0.2084 0.0559 0.0840
+StateIN                                             0.0936  -0.0203   0.2075 0.0569 0.1001
+StateKS                                             0.1065  -0.0161   0.2291 0.0613 0.0823
+StateKY                                             0.1068  -0.0104   0.2241 0.0586 0.0685
+StateLA                                             0.1231   0.0087   0.2374 0.0572 0.0314
+StateMA                                             0.1103  -0.0046   0.2251 0.0574 0.0548
+StateMD                                             0.0961  -0.0173   0.2096 0.0567 0.0900
+StateME                                             0.1522   0.0077   0.2967 0.0723 0.0351
+StateMI                                             0.1039  -0.0084   0.2161 0.0561 0.0643
+StateMN                                             0.0750  -0.0407   0.1906 0.0578 0.1949
+StateMO                                             0.1101  -0.0045   0.2246 0.0573 0.0547
+StateMS                                             0.1147  -0.0038   0.2333 0.0593 0.0529
+StateMT                                             0.1195  -0.0372   0.2761 0.0783 0.1272
+StateNC                                             0.1177   0.0049   0.2305 0.0564 0.0370
+StateND                                             0.0568  -0.0857   0.1993 0.0712 0.4257
+StateNE                                             0.0860  -0.0451   0.2172 0.0656 0.1896
+StateNH                                             0.1698   0.0345   0.3052 0.0677 0.0121
+StateNJ                                             0.1025  -0.0089   0.2138 0.0557 0.0657
+StateNM                                             0.1417   0.0138   0.2695 0.0639 0.0267
+StateNV                                             0.0890  -0.0233   0.2014 0.0562 0.1129
+StateNY                                             0.1076  -0.0046   0.2199 0.0561 0.0551
+StateOH                                             0.0946  -0.0177   0.2069 0.0562 0.0922
+StateOK                                             0.0898  -0.0256   0.2053 0.0577 0.1197
+StateOR                                             0.0753  -0.0432   0.1938 0.0592 0.2036
+StatePA                                             0.1150   0.0033   0.2267 0.0559 0.0395
+StateRI                                             0.1409   0.0149   0.2668 0.0630 0.0253
+StateSC                                             0.0876  -0.0269   0.2020 0.0572 0.1259
+StateSD                                             0.0947  -0.0669   0.2562 0.0808 0.2413
+StateTN                                             0.1153   0.0015   0.2291 0.0569 0.0427
+StateTX                                             0.1143   0.0040   0.2247 0.0552 0.0383
+StateUT                                             0.0978  -0.0202   0.2158 0.0590 0.0973
+StateVA                                             0.0890  -0.0238   0.2018 0.0564 0.1146
+StateVT                                             0.0416  -0.1511   0.2343 0.0963 0.6657
+StateWA                                             0.1072  -0.0064   0.2209 0.0568 0.0592
+StateWI                                             0.0482  -0.0679   0.1643 0.0581 0.4062
+StateWV                                             0.0898  -0.0396   0.2192 0.0647 0.1653
+StateWY                                             0.0767  -0.0842   0.2375 0.0804 0.3406
+Company_grpCITIBANK, N.A.                           0.1922   0.1651   0.2193 0.0136 0.0000
+Company_grpCL Holdings LLC                         -0.2041  -0.2294  -0.1788 0.0127 0.0000
+Company_grpENCORE CAPITAL GROUP INC.                0.2858   0.2677   0.3039 0.0090 0.0000
+Company_grpEQUIFAX, INC.                            0.3115   0.2889   0.3342 0.0113 0.0000
+Company_grpExperian Information Solutions Inc.     -0.0418  -0.0660  -0.0175 0.0121 0.0006
+Company_grpOther                                   -0.0386  -0.0549  -0.0223 0.0081 0.0000
+Company_grpPortfolio Recovery Associates, LLC       0.1315   0.1131   0.1498 0.0092 0.0000
+Company_grpResurgent Capital Services L.P.          0.0323   0.0146   0.0499 0.0088 0.0003
+Company_grpSYNCHRONY FINANCIAL                      0.0228  -0.0043   0.0498 0.0135 0.0920
+Company_grpTRANSUNION INTERMEDIATE HOLDINGS, INC.   0.6126   0.5881   0.6371 0.0122 0.0000
+Submitted.viaPostal mail                            0.0256  -0.0429   0.0942 0.0343 0.4549
+Submitted.viaReferral                               0.0316  -0.0263   0.0895 0.0289 0.2747
+Submitted.viaWeb                                    0.0621   0.0341   0.0901 0.0140 0.0000
+Submitted.viaWeb Referral                           0.1354  -0.0766   0.3473 0.1060 0.2015
+TimelyYes                                           0.0633   0.0311   0.0955 0.0161 0.0001
+ConsentConsent provided                            -0.0166  -0.0235  -0.0097 0.0034 0.0000
+ConsentConsent withdrawn                           -0.0457  -0.1071   0.0156 0.0307 0.1361
+ConsentN/A                                              NA       NA       NA     NA     NA
+ConsentNone                                        -0.0958  -0.1157  -0.0760 0.0099 0.0000
+ConsentOther                                       -0.0324  -0.0547  -0.0101 0.0112 0.0037
