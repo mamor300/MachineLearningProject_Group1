@@ -1,0 +1,36 @@
+############ Running a logit ################
+    
+  # Using bigglm with family = binomial for the logit model 
+##Simplifying categorical vars that have too many buckets, combining 
+    # consent and timely into a binary variable 
+    df <- df %>%
+      mutate(
+        # Simplify Consent: Keep "provided", "withdrawn", otherwise "Other/None"
+        Consent_clean = factor(case_when(
+          Consent == "Consent provided" ~ "Provided",
+          Consent == "Consent withdrawn" ~ "Withdrawn",
+          TRUE ~ "Other_None"
+        )),
+        # Ensure Timely is a simple 0/1
+        is_timely = as.numeric(grepl("Yes", Timely, ignore.case = TRUE))
+      )
+    
+    library(biglm)
+    
+    # We use a slightly more robust version of the formula
+    logit_model <- bigglm(
+      Relief ~ Wait.time + Year + qtr + PC1 + PC2 + PC3 + PC4 + 
+        cluster + `Share of people of color` + `CI Index Score` + 
+        `Not Credit Included` + `Credit Constrained` + CreditTier + 
+        Studio_fmr + OneRoom_fmr + TwoRoom_fmr + ThreeRoom_fmr + 
+        FourRoom_fmr + Permit_Units + Permit_Valuation + pct_bach_degree + 
+        is_servicemember + is_older_american + prop_young + prop_65plus + 
+        prop_female + prop_hispanic + prop_black + prop_black_fem + 
+        is_older_county + has_pub_response + has_tags + 
+        Company_grp + Submitted.via + is_timely + Consent_clean, 
+      data = df, 
+      family = binomial(),
+      maxit = 50 # Gives the model more time to converge
+    )
+    
+    summary(logit_model)
