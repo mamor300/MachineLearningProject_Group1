@@ -46,7 +46,7 @@ CFPB1 <- CFPB0 |>
 #2.
 {
   # Imputing with K Nearest Neighbors
-  # Flaggingg missing ZIPs in a separate df
+  # Flaggingg missing ZIPs in a new column
   df <- CFPB1 %>%
     mutate(ZIP.char    = as.character(ZIP.code),
            prefix3     = substr(ZIP.char, 1, 3),
@@ -92,7 +92,8 @@ CFPB1 <- CFPB0 |>
   
   # Joining imputed ZIP codes with full dataset
   CFPB2 <- df %>%
-    mutate(ZIP.knn.raw = round(knn_result$ZIP.num)) %>%
+    mutate(ZIP.knn.raw = round(knn_result$ZIP.num),
+           imputed = ifelse(knn_result$ZIP.num_imp==TRUE,1,0)) %>%
     rowwise() %>%
     mutate(
       ZIP.knn = if (ZIP.missing == 1) {
@@ -101,7 +102,7 @@ CFPB1 <- CFPB0 |>
         snap_to_valid(ZIP.knn.raw)                     
       }
     ) %>%
-    ungroup() %>%
+    ungroup()%>%
     mutate(ZIP.knn.ch = as.character(ZIP.knn),
            ZIP.missing = ifelse(nchar(ZIP.knn) < 5 | grepl("X$", ZIP.knn), 1, 0),
            ZIP.knn = as.factor(ZIP.knn.ch),
@@ -126,6 +127,19 @@ CFPB1 <- CFPB0 |>
               'ZIP.state.match',
               'ZIP.char',
               'ZIP.knn.raw'))
+  # Checking that the proportion of unique imputed zip codes are comparable to complete zips 
+  ## Pre-imputation, unique zip codes were 15.8% of the total
+  ## Post-imputation, unique zip codes were 14.4% of total
+  ## Unique imputed zips are more prevalent *among* the imputed list (32.3%), 
+  ## but there is significant overlap with unique zips in the not_imputed list.
+  # imputed <- CFPB2|> filter(imputed==1)
+  # not_imputed <- CFPB2|> filter(imputed==0)  
+  # length(unique(imputed$ZIP.knn))/length(imputed$ZIP.knn)
+  # length(unique(not_imputed$ZIP.knn))/length(not_imputed$ZIP.knn)
+  # length(unique(CFPB2$ZIP.knn))/length(CFPB2$ZIP.knn)
+  # length(unique(imputed$ZIP.knn))     # 2311 unique imputed
+  # length(unique(not_imputed$ZIP.knn)) # 8597 unique complete
+  # length(unique(CFPB2$ZIP.knn))       # 8888 unique total 
 }
 #3.
 {
@@ -760,7 +774,7 @@ CFPB10 <- CFPB9 |>
 }
 #12
 {
-#random forest imputation
+# Random Forest
 set.seed(12345)
 sapply(CFPB11, class)
 CFPB.mutate <- CFPB11 %>%
@@ -773,8 +787,7 @@ CFPB.mutate <- CFPB11 %>%
 sapply(CFPB.mutate[sapply(CFPB.mutate, is.factor)], nlevels) %>% 
   sort(decreasing = TRUE) %>% 
   head(20)
-#all of these had more than 53 categories (alot more) so I dropped them
-## I wouldn't drop all of these. Since we have 60K observations, ZIP code could be predictive
+# Random Forest won't run when a factor variable has > than 53 levels
 drop_cols_CFPB <- c(
   "ZIP",
   "FIPS",
