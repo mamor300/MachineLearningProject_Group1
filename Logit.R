@@ -13,20 +13,18 @@ pacman::p_load(
 )
 
 CFPB0 <- read_xlsx("CFPB.xlsx") 
-
+sapply(CFPB0,class)
 CFPB <- CFPB0|>
   mutate(Relief = as.numeric(Relief),
+         Year   = as.factor(Year),
          across(where(is.character), as.factor))|>
   select(-c(
     "Received",
     "Sent",
-    "Wait.time",
     "sample",
-    "Complaint.ID",
     "ZIP",
     "FIPS",
-    "Company"
-            ))
+    "Company"))
 
 CFPB.matrix <- model.matrix(Relief~., data = CFPB)
 CFPB.lm.test <- glmnet(CFPB.matrix, CFPB$Relief, family=binomial(link=logit))

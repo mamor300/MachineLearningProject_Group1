@@ -148,6 +148,7 @@ CFPB3 <- CFPB2 |>
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
          Year                         = as.factor(year(Date.received)),
+         Month                        = as.factor(month(Date.received)),
          Issue                        = as.factor(Issue),
          Sub.issue                    = as.factor(Sub.issue),
          Company.public.response      = as.factor(Company.public.response),
@@ -171,9 +172,9 @@ CFPB3 <- CFPB2 |>
          -Consumer.disputed.,
          -Consumer.complaint.narrative,
          -ZIP.knn,
-         -Company.response.to.consumer)|>
-  mutate(Wait.time = as.numeric(Sent - Received))|>
-  select(Relief, Received, Sent, Year, Wait.time,everything())
+         -Company.response.to.consumer,
+         -Complaint.ID)|>
+  select(Relief, Year,everything())
 }
 #4.
 {
@@ -223,9 +224,6 @@ CFPB3 <- CFPB2 |>
   # Left join
   CFPB4 <- CFPB3 %>%
     left_join(med_debt_clean, by = c("FIPS", "Year"))
-  colMeans(is.na(CFPB4))
-  # median impute for remaining missing values (about 17% of medical debt)
-  CFPB4 <- na.roughfix(CFPB4[19:25])
 }
 #5.
 {
@@ -236,12 +234,8 @@ county_debt<- read.csv("Question05/household-debt-by-county.csv")
 #using the household debt data, cleaning and formatting it from 
 #long to wide
 
-##Reshaping the county_debt data to be merged with CFPB
-colnames(CFPB3)
-colnames(county_debt)
-
 #Alignging the FIPS codes to be the same in both data sets 
-CFPB.countydebt <- CFPB3 %>% 
+CFPB.countydebt <- CFPB4 %>% 
   mutate(FIPS = str_pad(as.character(FIPS), width = 5, pad = '0'))
 county_debt <- county_debt %>% 
   mutate(area_fips = str_pad(as.character(area_fips), width = 5, pad = '0'))%>%
@@ -883,7 +877,11 @@ for (col in na_cols) {
   
   CFPBimpute_out[[col]][missing_idx] <- predict(rf_model, newdata = newdata)
 }
-CFPB <- cbind(CFPBimpute_out,CFPBheldout)
+CFPB <- cbind(CFPBimpute_out,CFPBheldout)|>
+  rename(Debt.component1 = PC1,
+         Debt.component2 = PC2,
+         Debt.component3 = PC3,
+         Debt.component4 = PC4)
 }
 
 # rm(list = setdiff(ls(), "CFPB"))
