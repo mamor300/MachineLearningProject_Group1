@@ -848,6 +848,6 @@ for (col in na_cols) {
 }
 CFPB <- cbind(CFPBimpute_out,CFPBheldout)
 }
-
-rm(list = setdiff(ls(), "CFPB"))
-gc()
+# 
+# rm(list = setdiff(ls(), "CFPB"))
+# gc()
