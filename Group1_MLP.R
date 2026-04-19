@@ -45,55 +45,101 @@ CFPB1 <- CFPB0 |>
 }
 #2.
 {
-# Imputing zip codes with means
-## Each means-imputed value uses the average among the first 3 digits of non-missing "siblings"
-## This produces 95 NAs for zip codes that do not have any non-missing siblings
-## Creating a branch of the CFPB data that prepares the missing zips for imputation
-df <- CFPB1 |>
-  mutate(ZIP.char    = as.character(ZIP.code),
-         prefix3     = substr(ZIP.char, 1, 3),
-         ZIP.missing = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0))
-
-# Creating a dataframe of the valid ZIP codes
-## A numeric vector helps calculate the means
-## Character vector manages the prefixes
-valid_zips <- ZIPCODES |>
-  mutate(ZIP.char   = formatC(as.numeric(ZIP), width = 5, flag = "0", format = "d"),
-         prefix3    = substr(ZIP.char, 1, 3),
-         ZIP.num    = as.numeric(ZIP.char)) |>
-  select(prefix3, ZIP.char, ZIP.num)
-
-# Computing means for each 3-digit prefix
-ZIP.medians <- df |>
-  filter(ZIP.missing == 0, nchar(trimws(ZIP.char)) == 5) |>
-  group_by(prefix3) |>
-  summarise(ZIP.median.num = round(median(as.numeric(ZIP.char), na.rm = TRUE)))
-
-# Identifying the nearest valid zip for each median value
-## ZIP.imp is 
-ZIP.impute <- ZIP.medians |>
-  left_join(valid_zips, by = "prefix3") |>
-  mutate(dist = abs(ZIP.num - ZIP.median.num)) |>
-  group_by(prefix3) |>
-  slice_min(order_by = dist, n = 1, with_ties = FALSE) |>  
-  select(prefix3, ZIP.imp = ZIP.char)
-
-# Replacing partial ZIP codes with imputed ones
-CFPB2 <- df |>
-  left_join(ZIP.impute, by = "prefix3") |>
-  mutate(ZIP.Imputed = as.character(ifelse(ZIP.missing == 1, ZIP.imp, ZIP.char)),
-         ZIP.missing = ifelse(nchar(ZIP.Imputed) < 5 | grepl("X$", ZIP.Imputed), 1, 0)) |>
-  select(-c(ZIP.char,ZIP.imp, prefix3))
-
-# Checking to make sure states match
-StateCheck <- CFPB2 |>
-  left_join(ZIPCODES, by = c("ZIP.Imputed" = "ZIP"))|>
-  mutate(state_match = (State == STATE))
-table(StateCheck$state_match, useNA = "ifany")
-# Creating a dataframe with all the obs that failed to impute
-# try <- CFPB2[is.na(CFPB2$ZIP.missing),]
-
-#rm(StateCheck,CFPB0, CFPB1,df,try,ZIP.impute,ZIP.means,valid_zips)
+  # Imputing with K Nearest Neighbors
+  # Flaggingg missing ZIPs in a new column
+  df <- CFPB1 %>%
+    mutate(ZIP.char    = as.character(ZIP.code),
+           prefix3     = substr(ZIP.char, 1, 3),
+           ZIP.missing = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
+           ZIP.num     = ifelse(ZIP.missing == 0, as.numeric(ZIP.char), NA))
+  
+  # Building a dataframe that KNN can run on using only original columns
+  ## Limiting factors that might effect imputation to ones that are location-based
+  knn_df <- df %>%
+    mutate(
+      State       = as.factor(State),
+      Company     = as.factor(Company),
+      prefix3     = as.factor(prefix3)
+    ) %>%
+    dplyr::select(ZIP.num, State, Company, prefix3)
+  
+  # Running KNN imputation
+  knn_result <- kNN(knn_df, variable = "ZIP.num", k = 5)
+  
+  # Creating valid_zips df for reference 
+  valid_zips <- ZIPCODES %>%
+    mutate(ZIP.char   = formatC(as.numeric(ZIP), width = 5, flag = "0", format = "d"),
+           prefix3    = substr(ZIP.char, 1, 3),
+           ZIP.num    = as.numeric(ZIP.char)) %>%
+    select(prefix3, ZIP.char, ZIP.num)
+  
+  # Building a function to snap to nearest prefix and valid ZIP in ZIPCODES
+  valid_zips_vec <- valid_zips$ZIP.num  # numeric vector for fast lookup
+  
+  snap_to_valid <- function(zip_num, prefix = NULL) {
+    if (!is.null(prefix) && nchar(prefix) == 3) {
+      candidates <- valid_zips[valid_zips$prefix3 == prefix, ]
+    } else {
+      candidates <- valid_zips  # fallback: no prefix restriction
+    }
+    
+    if (nrow(candidates) == 0) {
+      candidates <- valid_zips
+    }
+    
+    candidates$ZIP.char[which.min(abs(candidates$ZIP.num - zip_num))]
+  }
+  
+  # Joining imputed ZIP codes with full dataset
+  CFPB2 <- df %>%
+    mutate(ZIP.knn.raw = round(knn_result$ZIP.num),
+           imputed = ifelse(knn_result$ZIP.num_imp==TRUE,1,0)) %>%
+    rowwise() %>%
+    mutate(
+      ZIP.knn = if (ZIP.missing == 1) {
+        snap_to_valid(ZIP.knn.raw, prefix = prefix3)  
+      } else {
+        snap_to_valid(ZIP.knn.raw)                     
+      }
+    ) %>%
+    ungroup()%>%
+    mutate(ZIP.knn.ch = as.character(ZIP.knn),
+           ZIP.missing = ifelse(nchar(ZIP.knn) < 5 | grepl("X$", ZIP.knn), 1, 0),
+           ZIP.knn = as.factor(ZIP.knn.ch),
+           ZIP.match = as.numeric(substr(ZIP.knn.ch, 1, 3) != substr(ZIP.code, 1, 3))) %>%
+    left_join(ZIPCODES[,c(2,4)],join_by("ZIP.knn.ch"=="ZIP"))%>%
+    mutate(ZIP.state.match = ifelse(STATE==State,0,1))%>%
+    select(c(Relief,State,ZIP.knn,everything()))%>%
+    select(-c('ZIP.match',
+              'ZIP.missing',
+              'ZIP.code',
+              'ZIP.knn.ch',
+              'STATE',
+              'ZIP.num',
+              'prefix3',
+              'ZIP.state.match','ZIP.match',
+              'ZIP.missing',
+              'ZIP.code',
+              'ZIP.knn.ch',
+              'STATE',
+              'ZIP.num',
+              'prefix3',
+              'ZIP.state.match',
+              'ZIP.char',
+              'ZIP.knn.raw'))
+  # Checking that the proportion of unique imputed zip codes are comparable to complete zips 
+  ## Pre-imputation, unique zip codes were 15.8% of the total
+  ## Post-imputation, unique zip codes were 14.4% of total
+  ## Unique imputed zips are more prevalent *among* the imputed list (32.3%), 
+  ## but there is significant overlap with unique zips in the not_imputed list.
+  # imputed <- CFPB2|> filter(imputed==1)
+  # not_imputed <- CFPB2|> filter(imputed==0)  
+  # length(unique(imputed$ZIP.knn))/length(imputed$ZIP.knn)
+  # length(unique(not_imputed$ZIP.knn))/length(not_imputed$ZIP.knn)
+  # length(unique(CFPB2$ZIP.knn))/length(CFPB2$ZIP.knn)
+  # length(unique(imputed$ZIP.knn))     # 2311 unique imputed
+  # length(unique(not_imputed$ZIP.knn)) # 8597 unique complete
+  # length(unique(CFPB2$ZIP.knn))       # 8888 unique total 
 }
 #3.
 {
@@ -107,14 +153,13 @@ CFPB3 <- CFPB2 |>
          Company.public.response      = as.factor(Company.public.response),
          Company                      = as.factor(Company),
          State                        = as.factor(State),
-         ZIP                          = as.character(ZIP.Imputed),
          Tags                         = as.factor(Tags),
          Consumer.consent.provided.   = as.factor(Consumer.consent.provided.),
          Submitted.via                = as.factor(Submitted.via),
          Timely.response.             = as.factor(Timely.response.),
-         ZIP.missing                  = ifelse(nchar(ZIP) < 5 | grepl("XX$", ZIP), 1, 0))|>
+         ZIP                          = ZIP.knn)|>
   left_join(ZIPCODES |> select(ZIP, FIPS), by = "ZIP")|>
-  relocate(c(ZIP,ZIP.missing,FIPS),.after = State)|>
+  relocate(c(ZIP,FIPS),.after = State)|>
   mutate(FIPS = as.factor(FIPS))|>
   rename(Received      = Date.received,
          Sent          = Date.sent.to.company,
@@ -125,17 +170,10 @@ CFPB3 <- CFPB2 |>
          -Sub.product,
          -Consumer.disputed.,
          -Consumer.complaint.narrative,
-         -ZIP.Imputed,
-         -ZIP.code,
-         -ZIP.missing,
+         -ZIP.knn,
          -Company.response.to.consumer)|>
   mutate(Wait.time = as.numeric(Sent - Received))|>
   select(Relief, Received, Sent, Year, Wait.time,everything())
-# Verifying that the only incomplete cases are ones which did not impute
-CFPB3 <- CFPB3 |>
-  mutate(missing   = as.numeric(ifelse(!complete.cases(CFPB3),1,0))) 
-# summary(!complete.cases(CFPB3))
-# summary(is.na(CFPB3$ZIP))
 }
 #4.
 {
@@ -187,7 +225,7 @@ CFPB3 <- CFPB3 |>
     left_join(med_debt_clean, by = c("FIPS", "Year"))
   colMeans(is.na(CFPB4))
   # median impute for remaining missing values (about 17% of medical debt)
-  CFPB4 <- na.roughfix(CFPB4[20:26])
+  CFPB4 <- na.roughfix(CFPB4[19:25])
 }
 #5.
 {
@@ -736,7 +774,7 @@ CFPB10 <- CFPB9 |>
 }
 #12
 {
-#random forest imputation
+# Random Forest
 set.seed(12345)
 sapply(CFPB11, class)
 CFPB.mutate <- CFPB11 %>%
@@ -749,8 +787,7 @@ CFPB.mutate <- CFPB11 %>%
 sapply(CFPB.mutate[sapply(CFPB.mutate, is.factor)], nlevels) %>% 
   sort(decreasing = TRUE) %>% 
   head(20)
-#all of these had more than 53 categories (alot more) so I dropped them
-## I wouldn't drop all of these. Since we have 60K observations, ZIP code could be predictive
+# Random Forest won't run when a factor variable has > than 53 levels
 drop_cols_CFPB <- c(
   "ZIP",
   "FIPS",
@@ -848,6 +885,8 @@ for (col in na_cols) {
 }
 CFPB <- cbind(CFPBimpute_out,CFPBheldout)
 }
-# 
+
 # rm(list = setdiff(ls(), "CFPB"))
 # gc()
+
+write_xlsx(CFPB, "CFPB.xlsx")
