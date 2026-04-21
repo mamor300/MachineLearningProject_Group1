@@ -529,8 +529,9 @@ compiled_county_education_measures <- read_csv("Question08/compiled_county_educa
   select(fips,pct_bach_degree,year)|>
   rename(FIPS = fips,
          Year = year)
-CFPB8 <- CFPB.bps |>
+CFPB8 <- CFPB.sahie |>
   left_join(compiled_county_education_measures,by= c("FIPS","Year"))
+  
 }
 #9.
 {
@@ -889,11 +890,25 @@ for (col in na_cols) {
   
   CFPBimpute_out[[col]][missing_idx] <- predict(rf_model, newdata = newdata)
 }
-CFPB <- cbind(CFPBimpute_out,CFPBheldout)
+CFPB12 <- cbind(CFPBimpute_out,CFPBheldout)
 }
 
-rm(list = setdiff(ls(), "CFPB"))
-gc()
+# rm(list = setdiff(ls(), "CFPB"))
+# gc()
+
+CFPB1 <- CFPB|>
+  mutate(Issue_combined = cbind(Issue,Sub.issue))|>
+  select(-c(
+  # select(-c(Wait.time,
+  #           PC1,
+  #           PC2,
+  #           PC3,
+  #           PC4,
+  #           ZIP,
+  #           FIPS,
+  #           Sub.issue,
+            Received,
+            Sent))
 
 write_xlsx(CFPB, "CFPB.xlsx")
 saveRDS(CFPB,"CFPB.rds")
