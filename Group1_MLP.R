@@ -148,6 +148,7 @@ CFPB3 <- CFPB2 |>
   mutate(Date.received                = as.Date(Date.received,"%m/%d/%y"),
          Date.sent.to.company         = as.Date(Date.sent.to.company,"%m/%d/%y"),
          Year                         = as.factor(year(Date.received)),
+         Month                        = as.factor(month(Date.received)),
          Issue                        = as.factor(Issue),
          Sub.issue                    = as.factor(Sub.issue),
          Company.public.response      = as.factor(Company.public.response),
@@ -171,7 +172,8 @@ CFPB3 <- CFPB2 |>
          -Consumer.disputed.,
          -Consumer.complaint.narrative,
          -ZIP.knn,
-         -Company.response.to.consumer)|>
+         -Company.response.to.consumer,
+         -Complaint.ID)|>
   mutate(Wait.time = as.numeric(Sent - Received))|>
   select(Relief, Received, Sent, Year, Wait.time,everything())
 }
@@ -734,7 +736,11 @@ CFPB10 <- CFPB9 |>
 {
   # 5 clusters
   #creating a matrix for mixed type cluster analysis
-  #using share of people of color, average household income, whether older or younger, Principal Component 1, is_older_county, and whether a legislature is republican controlled or not
+  #using share of people of color, 
+  # average household income, whether older or younger, 
+  # Principal Component 1, 
+  # is_older_county, and 
+  # whether a legislature is republican controlled or not
   # Create a named vector of Republican-controlled legislatures in 2024
   #republican_states <- c("AL", "AZ", "AR", "FL", "GA", "ID", "IN", "IA", 
   #"KS", "KY", "LA", "MS", "MO", "MT", "NH", "ND", 
@@ -886,7 +892,8 @@ for (col in na_cols) {
 CFPB <- cbind(CFPBimpute_out,CFPBheldout)
 }
 
-# rm(list = setdiff(ls(), "CFPB"))
-# gc()
+rm(list = setdiff(ls(), "CFPB"))
+gc()
 
 write_xlsx(CFPB, "CFPB.xlsx")
+saveRDS(CFPB,"CFPB.rds")

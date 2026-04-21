@@ -12,10 +12,11 @@ pacman::p_load(
   biglm
 )
 
-CFPB0 <- read_xlsx("CFPB.xlsx") 
+CFPB0 <- readRDS("CFPB.rds")
+
 sapply(CFPB0,class)
 CFPB <- CFPB0|>
-  mutate(Relief = as.numeric(Relief),
+  mutate(Relief = as.numeric(as.character(Relief)),
          Year   = as.factor(Year),
          across(where(is.character), as.factor))|>
   select(-c(
