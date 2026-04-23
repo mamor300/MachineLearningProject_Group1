@@ -913,7 +913,7 @@ CFPB <- CFPB12|>
   mutate(
     Issue = as.character(Issue),
     Sub.issue = as.character(Sub.issue),
-    Issue_combined = paste0(Issue,Sub.issue))|>
+    Issue_combined = as.factor(paste0(Issue,Sub.issue)))|>
   rename(MorePermits = high,
          LessPermits = low,
          Quarter = qtr)|>

@@ -1,4 +1,4 @@
-setwd("/Users/mattamor/MachineLearningProject_Group1")
+setwd("/Users/mattamor/MachineLearningProject_Group1/RandomForest")
 
 install.packages("caret")
 install.packages("randomForest")
@@ -66,6 +66,9 @@ CFPB_importance_frame %>%
   labs(x = "Variable", y = "Value", title = "Multiway Importance Plot") +
   theme_bw() +
   theme(legend.position = "none")
+
+CFPB.test <- readRDS("CFPB_test.rds")
+CFPB.rf <- readRDS("CFPB_rf.rds")
 
 CFPB.pred <- predict(CFPB.rf,newdata = CFPB.test)
 confusionMatrix(CFPB.pred,reference = CFPB.test$Relief)
