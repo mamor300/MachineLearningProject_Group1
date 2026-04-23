@@ -9,7 +9,8 @@ pacman::p_load(
   caret,
   missMDA,
   glmnet,
-  biglm
+  biglm,
+  broom
 )
 
 CFPB0 <- readRDS("CFPB.rds")
@@ -18,15 +19,7 @@ sapply(CFPB0,class)
 CFPB <- CFPB0|>
   mutate(Relief = as.numeric(as.character(Relief)),
          Year   = as.factor(Year),
-         across(where(is.character), as.factor))|>
-  select(-c(
-    "Received",
-    "Sent",
-    "sample",
-    "ZIP",
-    "FIPS",
-    "Company"))
-
+         across(where(is.character), as.factor))
 CFPB.matrix <- model.matrix(Relief~., data = CFPB)
 CFPB.lm.test <- glmnet(CFPB.matrix, CFPB$Relief, family=binomial(link=logit))
 cvfit <- cv.glmnet(CFPB.matrix, CFPB$Relief, family = "binomial")
@@ -55,9 +48,10 @@ plot(CFPB.lm,which = 3)
 plot(CFPB.lm,which = 5)
 summary(influence.measures(CFPB.lm))
 summary(CFPB.lm)
+summary.lm <- tidy(CFPB.lm)
 coef <- as.data.frame(CFPB.lm$coefficients)
 
 (exp(coef(CFPB.lm))-1)*100
-exp(coefRexp(coef(CFPB.lm))
+exp(coefRexp(coef(CFPB.lm)))
 
 CFPB.lm.test$a0

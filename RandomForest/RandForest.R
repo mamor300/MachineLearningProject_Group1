@@ -16,27 +16,12 @@ pacman::p_load(
   randomForestExplainer
 )
 
-CFPB0 <- readRDS("CFPB.rds")|>
-  mutate(Company = as.character(Company),
-         freq = n(),
-         .by = Company)|>
-  mutate(Company = case_when(
-    freq     >= 10 ~ Company,
-    .default = paste0("Other_", freq)),
-    Company  = as.factor(Company))|>
-  select(-c(freq,
-            ZIP,
-            FIPS,
-            Company))|>
-  rename(Share_pplofcolor = `Share of people of color`,
-         CI_score = `CI Index Score`,
-         NotCreditIncluded = `Not Credit Included`,
-         CreditConstrained = `Credit Constrained`)
+CFPB0 <- readRDS("CFPB.rds")
 
 set.seed(124)
-CFPB <- CFPB0[sample(1:nrow(CFPB0), 10000),]
+CFPB <- CFPB0[sample(1:nrow(CFPB0), 30000),]
 CFPB.test <- anti_join(CFPB0,CFPB)
-CFPB.test <- CFPB.test[sample(1:nrow(CFPB.test), 2000),]
+CFPB.test <- CFPB.test[sample(1:nrow(CFPB.test), 20000),]
   
 # Single Random Forest - Commented to avoid rerunning
 ctrl <- trainControl(method = "cv")
