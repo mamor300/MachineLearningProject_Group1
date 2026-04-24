@@ -58,7 +58,7 @@ pacman::p_load(
       Company     = as.factor(Company),
       prefix3     = as.factor(prefix3)
     ) %>%
-    dplyr::select(ZIP.num, State, Company, prefix3)
+    select(ZIP.num, State, Company, prefix3)
   
   # Running KNN imputation
   knn_result <- kNN(knn_df, variable = "ZIP.num", k = 5)

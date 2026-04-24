@@ -3,9 +3,12 @@ library(tigris)
 library(ggplot2)
 library(dplyr)
 
-#2.
+
+
+
+
 # Imputing zip codes with means
-## Each means-imputed value uses the average among the first 3 digits of non-missing "siblings"
+{## Each means-imputed value uses the average among the first 3 digits of non-missing "siblings"
 ## This produces 95 NAs for zip codes that do not have any non-missing siblings
 ## Creating a branch of the CFPB data that prepares the missing zips for imputation
 df <- CFPB1 %>%
@@ -48,16 +51,17 @@ StateCheck <- CFPB.compare%>%
 table(StateCheck$state_match, useNA = "ifany")
 # Creating a dataframe with all the obs that failed to impute
 try <- CFPB2[is.na(CFPB2$ZIP.missing),]
-
+}
 
 # Imputing with K Nearest Neighbors
-# Flaggingg missing ZIPs in a separate df
+{# Flaggingg missing ZIPs in a separate df
 df <- CFPB1 %>%
   mutate(ZIP.char    = as.character(ZIP.code),
          prefix3     = substr(ZIP.char, 1, 3),
          ZIP.missing = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
          ZIP.num     = ifelse(ZIP.missing == 0, as.numeric(ZIP.char), NA))
 
+df <- 
 # Building a dataframe that KNN can run on using only original columns
 ## Limiting factors that might effect imputation to ones that are location-based
 knn_df <- df %>%
@@ -132,6 +136,119 @@ CFPB2 <- df %>%
             'ZIP.char',
             'ZIP.knn.raw'))
 }
+# testing for accuracy
+## holding out test set
+set.seed(42)
+
+complete_idx <- which(df$ZIP.missing == 0)                      # row indices with real ZIPs
+test_idx     <- sample(complete_idx, size = round(0.2 * length(complete_idx)))  # 20% sample
+
+true_zips <- df$ZIP.num[test_idx]   # save ground truth BEFORE masking
+
+df_test        <- df
+df_test$ZIP.num[test_idx] <- NA
+
+knn_df_test <- df_test %>%
+  mutate(
+    State   = as.factor(State),
+    Company = as.factor(Company),
+    prefix3 = as.factor(prefix3)
+  ) %>%
+  dplyr::select(ZIP.num, State, Company, prefix3)
+
+knn_result_test <- kNN(knn_df_test, variable = "ZIP.num", k = 5)
+
+imputed_zips <- knn_result_test$ZIP.num[test_idx]
+accuracy_df <- data.frame(
+  row_idx    = test_idx,
+  true_zip   = true_zips,
+  imputed_zip = imputed_zips
+)
+
+# Exact match rate
+accuracy_df <- accuracy_df %>%
+  mutate(
+    exact_match   = true_zip == imputed_zip,
+    prefix3_true  = substr(formatC(true_zip,    width = 5, flag = "0"), 1, 3),
+    prefix3_imputed = substr(formatC(imputed_zip, width = 5, flag = "0"), 1, 3),
+    prefix3_match = prefix3_true == prefix3_imputed,
+    prefix4_true  = substr(formatC(true_zip,    width = 5, flag = "0"), 1, 4),
+    prefix4_imputed = substr(formatC(imputed_zip, width = 5, flag = "0"), 1, 4),
+    prefix4_match = prefix4_true == prefix4_imputed,
+    abs_error     = abs(true_zip - imputed_zip),
+    exact_error = ifelse(exact_match==TRUE,0,1),
+    prefix4_error = ifelse(prefix4_match==TRUE,0,1),
+    prefix3_error = ifelse(prefix3_match==TRUE,0,1)
+  )
+colMeans(accuracy_df[,12:14])
+mean(accuracy_df$abs_error)
+
+# Random Forest imputation
+library(dplyr)
+install.packages("missForest")
+library(missForest)
+
+# ── 1. Build the full df as before ────────────────────────────────────────────
+df <- CFPB1 %>%
+  mutate(ZIP.char    = as.character(ZIP.code),
+         prefix3     = substr(ZIP.char, 1, 3),
+         ZIP.missing = ifelse(nchar(ZIP.code) < 5 | grepl("X$", ZIP.code), 1, 0),
+         ZIP.num     = ifelse(ZIP.missing == 0, as.numeric(ZIP.char), NA))
+
+# ── 2. Pull out a test set of complete ZIP codes ───────────────────────────────
+set.seed(42)
+
+complete_idx <- which(df$ZIP.missing == 0)
+test_idx     <- sample(complete_idx, size = round(0.2 * length(complete_idx)))
+
+true_zips <- df$ZIP.num[test_idx]
+
+# ── 3. Mask the test rows ─────────────────────────────────────────────────────
+df_test <- df
+df_test$ZIP.num[test_idx] <- NA
+
+# ── 4. Build the imputation dataframe ─────────────────────────────────────────
+rf_df_test <- df_test %>%
+  mutate(
+    State   = as.factor(State),
+    Company = as.factor(Company),
+    prefix3 = as.factor(prefix3)
+  ) %>%
+  dplyr::select(ZIP.num, State, Company, prefix3)
+
+# ── 5. Run missForest imputation ──────────────────────────────────────────────
+# missForest requires a data.frame (not tibble) with no character columns
+rf_result <- missForest(as.data.frame(rf_df_test), ntree = 100, verbose = TRUE)
+
+# OOB imputation error estimate provided by missForest itself
+cat("\nmissForest OOB error (NRMSE for numeric vars):\n")
+print(rf_result$OOBerror)
+
+# ── 6. Extract imputed values for test rows ───────────────────────────────────
+imputed_zips <- rf_result$ximp$ZIP.num[test_idx]
+
+# ── 7. Accuracy evaluation ────────────────────────────────────────────────────
+accuracy_df <- data.frame(
+  row_idx         = test_idx,
+  true_zip        = true_zips,
+  imputed_zip     = imputed_zips
+) %>%
+  mutate(
+    exact_match   = true_zip == imputed_zip,
+    prefix3_true  = substr(formatC(true_zip,    width = 5, flag = "0"), 1, 3),
+    prefix3_imputed = substr(formatC(imputed_zip, width = 5, flag = "0"), 1, 3),
+    prefix3_match = prefix3_true == prefix3_imputed,
+    prefix4_true  = substr(formatC(true_zip,    width = 5, flag = "0"), 1, 4),
+    prefix4_imputed = substr(formatC(imputed_zip, width = 5, flag = "0"), 1, 4),
+    prefix4_match = prefix4_true == prefix4_imputed,
+    abs_error     = abs(true_zip - imputed_zip),
+    exact_error = ifelse(exact_match==TRUE,0,1),
+    prefix4_error = ifelse(prefix4_match==TRUE,0,1),
+    prefix3_error = ifelse(prefix3_match==TRUE,0,1)
+  )
+colMeans(accuracy_df[,12:14])
+mean(accuracy_df$abs_error)
+
 #3.
 {
   ## First major cleaning of CFPB data
@@ -168,7 +285,7 @@ CFPB2 <- df %>%
 }
 
 # Playing around with zip code maps
-## Beyond the scope of this project
+{## Beyond the scope of this project
 zips <- zctas(year = 2023)  # downloads zip code shapefiles
 
 zip_counts <- df %>%
@@ -224,4 +341,4 @@ ggplot(merged) +
                       name = "# Listings") +
   theme_minimal() +
   labs(title = "Listing Frequency by Zip Code")
-
+}

@@ -19,13 +19,13 @@ pacman::p_load(
 CFPB0 <- readRDS("CFPB.rds")
 
 set.seed(124)
-CFPB <- CFPB0[sample(1:nrow(CFPB0), 30000),]
+CFPB <- CFPB0[sample(1:nrow(CFPB0), 20000),]
 CFPB.test <- anti_join(CFPB0,CFPB)
 CFPB.test <- CFPB.test[sample(1:nrow(CFPB.test), 20000),]
   
 # Single Random Forest - Commented to avoid rerunning
-ctrl <- trainControl(method = "cv")
-tunegrid <- expand.grid(.mtry = (5:12))
+ctrl <- trainControl(method = "repeatedcv")
+tunegrid <- expand.grid(.mtry = (10:17))
 CFPB.rf <- train(Relief ~ .,
                data = CFPB,
                method = 'rf',
@@ -34,17 +34,18 @@ CFPB.rf <- train(Relief ~ .,
                tuneGrid = tunegrid,
                importance = TRUE,
                ntree = 500)
-CFPB.rf <- randomForest(Relief~.,
-                        data=CFPB,
-                        ntree = 100, 
-                        importance = TRUE)
+# CFPB.rf <- randomForest(Relief~.,
+#                         data=CFPB,
+#                         ntree = 100,
+#                         importance = TRUE)
+saveRDS(CFPB.rf,"CFPB_rf.rds")
+CFPB.rf <- readRDS("CFPB_rf.rds")
 CFPB.rf$finalModel
-plot(CFPB.rf$finalModel)
+plot(CFPB.rf)
 CFPB.imp.rf <- varImp(CFPB.rf)
 CFPB.imp.rf <- CFPB.imp.rf$importance|>rownames_to_column()
 varImpPlot(CFPB.rf$finalModel)
-saveRDS(CFPB.rf,"CFPB_rf_noZipFipsCompany.rds")
-CFPB.rf <- readRDS("CFPB_rf.rds")
+
 
 # Importance frame
 CFPB_importance_frame <- measure_importance(CFPB.rf$finalModel)
@@ -67,8 +68,8 @@ CFPB_importance_frame %>%
   theme_bw() +
   theme(legend.position = "none")
 
+# Testing model on test data
 CFPB.test <- readRDS("CFPB_test.rds")
-CFPB.rf <- readRDS("CFPB_rf.rds")
-
-CFPB.pred <- predict(CFPB.rf,newdata = CFPB.test)
-confusionMatrix(CFPB.pred,reference = CFPB.test$Relief)
+CFPB.old <- CFPB.test|>filter(is_older_american==1)
+CFPB.pred <- predict(CFPB.rf,newdata = CFPB.old)
+confusionMatrix(CFPB.pred,reference = CFPB.old$Relief)
