@@ -1,0 +1,124 @@
+##### Starting from scratch with the UPDATED df for the logit 
+
+# Ensure Relief is binary (0/1 or factor)
+df$Relief <- as.factor(df$Relief)
+
+# Logit model with all variables
+logit_full <- glm(Relief ~ Year + State + Pub.response + Consent + Submitted.via + 
+                    Timely + Month + Quarter + LessPermits + MorePermits + 
+                    ShareOfPeopleOfColor + CI_score + NotCreditIncluded + 
+                    CreditConstrained + CreditTier + Studio_fmr + OneRoom_fmr + 
+                    TwoRoom_fmr + ThreeRoom_fmr + FourRoom_fmr + Permit_Units + 
+                    Permit_Valuation + PCTUI_PT + pct_bach_degree + is_servicemember + 
+                    is_older_american + prop_young + prop_65plus + prop_female + 
+                    prop_hispanic + prop_black + prop_black_fem + is_older_county + 
+                    cluster + Company + Issue_combined,
+                  data = df,
+                  family = binomial(link = "logit"))
+summary(logit_full)
+
+### Visualizing: Creating odds ratio's for the logit model ###
+
+# Extract coefficients
+my_coefs <- coef(logit_full)
+
+# Calculate Odds Ratios
+my_odds <- exp(my_coefs)
+
+# Combine into a clean table for your top variables
+results_table <- data.frame(
+  LogOdds = my_coefs,
+  OddsRatio = my_odds
+)
+
+# Look specifically at companies and submission methods
+print(round(results_table[grep("Company_grp|Submitted.via|is_timely"
+                               , rownames(results_table)), ], 3))  
+
+#### Visualizing with all variables ####   
+
+library(ggplot2)
+
+# 1. Extract the summary matrix
+s <- summary(logit_model)
+results <- as.data.frame(s$mat)
+results$Variable <- rownames(results)
+
+# 2. Calculate Odds Ratios and 95% Confidence Intervals
+results$OR <- exp(results$Coef)
+results$Lower <- exp(results$Coef - 1.96 * results$SE)
+results$Upper <- exp(results$Coef + 1.96 * results$SE)
+
+# 3. Filter for the most interesting variables (Companies and Methods)
+# We exclude Intercept and State variables for clarity
+plot_data <- results[!grepl("Intercept|State", results$Variable), ]
+
+# 4. Create the Forest Plot
+ggplot(plot_data, aes(x = reorder(Variable, OR), y = OR)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  geom_pointrange(aes(ymin = Lower, ymax = Upper), color = "steelblue") +
+  coord_flip() +  # Flip to make variable names readable
+  scale_y_log10() + # Use log scale because Odds Ratios are multiplicative
+  labs(
+    title = "Predictors of Consumer Relief (Logit Model)",
+    subtitle = "Odds Ratios > 1 indicate higher likelihood of relief",
+    x = "Variable",
+    y = "Odds Ratio (Log Scale)"
+  ) +
+  theme_minimal()  
+
+
+#### Visualizing with only signficiant variables ####
+
+# 1. Extract the summary matrix and p-values
+s <- summary(logit_model)
+results <- as.data.frame(s$mat)
+results$Variable <- rownames(results)
+
+# 2. Calculate Odds Ratios and 95% CIs
+results$OR <- exp(results$Coef)
+results$Lower <- exp(results$Coef - 1.96 * results$SE)
+results$Upper <- exp(results$Coef + 1.96 * results$SE)
+
+# 3. Rename p-value column for easier filtering (it's often the 4th column)
+colnames(results)[4] <- "p_val"
+
+# 4. Filter for significance (p < 0.05) and exclude the Intercept
+significant_data <- results[results$p_val < 0.05 & results$Variable != "(Intercept)", ]
+
+# 5. Create the "Significant Only" Forest Plot
+ggplot(significant_data, aes(x = reorder(Variable, OR), y = OR)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  geom_pointrange(aes(ymin = Lower, ymax = Upper), color = "darkgreen", size = 0.8) +
+  coord_flip() + 
+  scale_y_log10() +
+  labs(
+    title = "Statistically Significant Predictors of Relief",
+    subtitle = "Only variables with p < 0.05 | Odds Ratios on Log Scale",
+    x = "Predictor",
+    y = "Odds Ratio"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 9)) 
+
+#### Plotting residuals 
+par(mfrow = c(4, 4))
+plot(logit_full)
+
+# Generate predicted probabilities
+fitted_probs <- predict(logit_full, type = "response")
+
+# Convert to binary predictions using 0.5 threshold
+predicted_class <- ifelse(fitted_probs > 0.5, 1, 0)
+
+# Actual values
+actual <- as.numeric(df$Relief) - 1  # converts factor to 0/1
+
+# Accuracy
+accuracy <- mean(predicted_class == actual)
+cat("Accuracy:", round(accuracy * 100, 2), "%\n")
+
+# Confusion matrix for more detail
+table(Actual = actual, Predicted = predicted_class)
+
+summary(logit_full)
