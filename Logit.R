@@ -40,6 +40,7 @@ plot(pred, resid_raw,
      ylab = "Residuals")
 abline(h = 0, col = "red")
 
+CFPB <- readRDS("CFPB.rds")
 CFPB.lm <- glm(Relief~., data=CFPB, family=binomial(link=logit))
 
 plot(CFPB.lm, which = 1)
