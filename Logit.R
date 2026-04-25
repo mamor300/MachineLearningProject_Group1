@@ -40,8 +40,9 @@ plot(pred, resid_raw,
      ylab = "Residuals")
 abline(h = 0, col = "red")
 
-CFPB <- readRDS("CFPB.rds")
-CFPB.lm <- glm(Relief~., data=CFPB, family=binomial(link=logit))
+CFPB <- readRDS("CFPB.rds")|>
+  mutate(Relief = as.numeric(as.character(Relief)))
+CFPB.lm <- glm(Relief~., data=CFPB, family= gaussian)
 
 plot(CFPB.lm, which = 1)
 plot(CFPB.lm,which = 2)
@@ -50,8 +51,11 @@ plot(CFPB.lm,which = 5)
 summary(influence.measures(CFPB.lm))
 summary(CFPB.lm)
 summary.lm <- tidy(CFPB.lm)
-coef <- as.data.frame(CFPB.lm$coefficients)
 
+CFPB.pred <- as.factor(ifelse(predict(CFPB.lm, newdata = CFPB.test)>.5,1,0))
+confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
+
+AIC(CFPB.lm)
 (exp(coef(CFPB.lm))-1)*100
 exp(coefRexp(coef(CFPB.lm)))
 

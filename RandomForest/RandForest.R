@@ -70,9 +70,8 @@ CFPB_importance_frame %>%
 
 # Testing model on test data
 CFPB.test <- readRDS("CFPB_test.rds")
-CFPB.pred <- factor(CFPB.pred, levels = "0","1")
-confusionMatrix(CFPB.pred,reference = CFPB.test$Relief)
-
+CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
+confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
 
 CFPB.old <- CFPB.test|>filter(is_older_american==1)
 
