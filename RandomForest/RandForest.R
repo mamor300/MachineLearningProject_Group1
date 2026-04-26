@@ -69,7 +69,7 @@ CFPB_importance_frame %>%
   theme(legend.position = "none")
 
 # Testing model on test data
-CFPB.test <- readRDS("CFPB_test.rds")
+CFPB.test <- readRDS("CFPB.rds")
 CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
 confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
 

@@ -12,7 +12,8 @@ pacman::p_load(
   randomForest,
   clustMixType,
   censusapi,
-  forcats)
+  forcats,
+  car)
 
 #1. 
 {
@@ -648,9 +649,9 @@ pacman::p_load(
     mutate(PC = factor(PC, levels = PC)) |>
     pivot_longer(cols = c(individual, cumulative),
                  names_to = "type", values_to = "variance") |>
-    mutate(type = recode(type,
-                         "individual" = "Individual %",
-                         "cumulative" = "Cumulative %")) |>
+    mutate(type = recode_values(type,
+                         "individual" ~ "Individual %",
+                         "cumulative" ~ "Cumulative %")) |>
     ggplot(aes(x = PC)) +
     geom_col(data = ~ filter(.x, type == "Individual %"),
              aes(y = variance, fill = type), width = 0.6) +
