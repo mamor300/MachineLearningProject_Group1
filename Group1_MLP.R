@@ -384,6 +384,8 @@ pacman::p_load(
 }
 #8.
 {
+  # Fair Market Rent
+  {
   # Importing, cleaning, combining fair market rent data from 
   FMR22 <- read_xlsx("Question08/FY22_FMRs_revised.xlsx")|>
     rename(fips = fips2010,
@@ -431,9 +433,9 @@ pacman::p_load(
   ## Only includes metric for 
   CFPB.FMR <- CFPB7 |>
     left_join(FMR,by = c('FIPS',"Year"))
-  
-  ##Adding in County level building permit requests 
-  
+  }
+  # Building Permits
+  {
   # Function to pull and format BPS data by year
   # Direct URL for 2022 County Annual Data
   url_2022 <- "https://www2.census.gov/econ/bps/County/co2204y.txt"
@@ -514,8 +516,9 @@ pacman::p_load(
   
   CFPB.bps <- CFPB.FMR %>%
     left_join(all_bps_years_clean, by = c("FIPS", "Year"))
-  
-  #Verify the results 
+  }
+  # Percent Uninsured
+  {
   # This should show the counts for each year 
   table(CFPB.bps$Year)
   Sys.setenv(CENSUS_KEY = "ba79958600ff02f01da8a857d6a3243c191cfc8a")
@@ -523,8 +526,7 @@ pacman::p_load(
     name = "timeseries/healthins/sahie",
     type = "variables"
   )
-  #this will show you what all the variables chosen below are
-  library(purrr)
+  
   #no 2024 or 2025 data
   sahie <- map_dfr(2022:2023, ~getCensus(
     name   = "timeseries/healthins/sahie",
@@ -538,13 +540,16 @@ pacman::p_load(
   sahie$Year <- as.numeric(sahie$Year)
   CFPB.sahie <- CFPB.bps |>
     left_join(sahie,by = c('FIPS',"Year"))
+  }
+  # Percent 25+ with Bachelor's Degree or Higher
+  {
   compiled_county_education_measures <- read_csv("Question08/compiled_county_education_measures.csv")|>
     select(fips,pct_bach_degree,year)|>
     rename(FIPS = fips,
            Year = year)
   CFPB8 <- CFPB.sahie |>
     left_join(compiled_county_education_measures,by= c("FIPS","Year"))
-  
+  }
 }
 #9.
 {
@@ -1335,14 +1340,14 @@ saveRDS(CFPB,"CFPB.rds")
 # Model - Chosen
 ## catBoost
 {
-  #CATBOOST
+  # Installing necessary library and packages
+  {
   install.packages('remotes')
   remotes::install_url('https://github.com/catboost/catboost/releases/download/v1.2.10/catboost-R-windows-x86_64-1.2.10.tgz', INSTALL_opts = c("--no-multiarch", "--no-test-load"))
   library(catboost)
-  
-  # ── Key difference: CatBoost handles categoricals natively ──────────────────
-  # No need for sparse.model.matrix — pass raw data frame directly
-  # Identify categorical feature indices (0-based for CatBoost)
+  }
+  # Building and tuning catBoost model
+  {
   CFPB <- readRDS("CFPB.rds")
   feature_cols <- CFPB[, 1:37]
   feature_cols_no_target <- feature_cols[, colnames(feature_cols) != "Relief"]
@@ -1401,7 +1406,7 @@ saveRDS(CFPB,"CFPB.rds")
   # ── Accuracy & Confusion Matrix ──────────────────────────────────────────────
   accuracy <- mean(CBpredictions_class == y)
   table(CBpredictions_class, y)
-  caret::confusionMatrix(as.factor(CBpredictions_class), as.factor(y),mode="everything")
+  caret::confusionMatrix(as.factor(CBpredictions_class), as.factor(y), mode="everything")
   
   # ── QQ plot of residuals ─────────────────────────────────────────────────────
   qqnorm(CBresiduals)
@@ -1419,7 +1424,7 @@ saveRDS(CFPB,"CFPB.rds")
     labs(title = "CatBoost Feature Importance", x = "Feature", y = "Importance")
   
   # ── Hyperparameter Tuning via caret ─────────────────────────────────────────
-  # Note: use the catboost caret wrapper
+  # using the catboost caret wrapper
   tune_grid <- expand.grid(
     depth            = c(2, 4, 6),
     learning_rate    = c(0.05, 0.1, 0.3),
@@ -1440,7 +1445,7 @@ saveRDS(CFPB,"CFPB.rds")
     cb_tune <- caret::train(
       x          = feature_cols_no_target,
       y          = y_factor,
-      method     = catboost.caret,   # built-in caret interface
+      method     = catboost.caret,
       trControl  = tune_control,
       tuneGrid   = tune_grid#,
       #verbose    = FALSE
@@ -1449,59 +1454,224 @@ saveRDS(CFPB,"CFPB.rds")
   
   cb_tune$bestTune
   max(cb_tune$results$Accuracy)
+  }
+  # Measuring Accuracy on Full Data
+  {
   CATBpredictions_class <- ifelse(CBpredictions > 0.5, 1, 0)
   accuracy <- mean(CBpredictions_class == y)
-
   table(CBpredictions_class, y)
-  caret::confusionMatrix(as.factor(CBpredictions_class), as.factor(y),mode = "everything")
-  #tests
+  caret::confusionMatrix(as.factor(CBpredictions_class), as.factor(y), mode = "everything")
+  }
+  # Plotting Probability Density
+  {
+    library(PRROC)
+    
+    pr_obj <- pr.curve(
+      scores.class0 = CBpredictions[y == 1],
+      scores.class1 = CBpredictions[y == 0],
+      curve = TRUE
+    )
+    
+    pr_df <- as.data.frame(pr_obj$curve)
+    colnames(pr_df) <- c("Recall", "Precision", "Threshold")
+    
+    ggplot(pr_df, aes(x = Recall, y = Precision)) +
+      geom_line(color = "steelblue", linewidth = 1) +
+      labs(
+        title = paste0("Precision-Recall Curve (AUC = ", round(pr_obj$auc.integral, 3), ")"),
+        x = "Recall",
+        y = "Precision"
+      ) +
+      theme_minimal()
+    
+    prob_df <- data.frame(
+      Probability = CBpredictions,
+      Outcome     = factor(y, levels = c(0, 1), labels = c("No Relief", "Relief"))
+    )
+    
+    ggplot(prob_df, aes(x = Probability, fill = Outcome)) +
+      geom_density(alpha = 0.5) +
+      scale_fill_manual(values = c("steelblue", "tomato")) +
+      labs(
+        title = "Predicted Probabilities by Actual Outcome",
+        x     = "Predicted Probability of Relief",
+        y     = "Density",
+        fill  = "Actual Outcome"
+      ) +
+      theme_minimal()
+    
+    # Get predicted probabilities from cb_tune
+    cb_tune_probs <- predict(cb_tune, newdata = feature_cols_no_target, type = "prob")
+    
+    # cb_tune_probs will be a data frame with columns "0" and "1" (or "X0", "X1")
+    # Use the column for class "1" (Relief)
+    prob_df <- data.frame(
+      Probability = cb_tune_probs[, "1"],  # or cb_tune_probs$`1`
+      Outcome     = factor(y, levels = c(0, 1), labels = c("No Relief", "Relief"))
+    )
+    
+    ggplot(prob_df, aes(x = Probability, fill = Outcome)) +
+      geom_density(alpha = 0.5) +
+      scale_fill_manual(values = c("steelblue", "tomato")) +
+      labs(
+        title = "Predicted Probabilities by Actual Outcome (Tuned CatBoost)",
+        x     = "Predicted Probability of Relief",
+        y     = "Density",
+        fill  = "Actual Outcome"
+      ) +
+      theme_minimal()
+  }
+  # Measuring accuracy on test data
+  {
   CFPB_test <- readRDS("CFPB_test.rds")
-  # 1. Process CFPB_test the same way as training data
   colnames(CFPB_test) <- make.names(colnames(CFPB_test))
   
-  # 2. Align factor levels to match training data
+  # Aligning factor levels to match training data
   for (col in names(CFPB)) {
     if (is.factor(CFPB[[col]]) && col %in% names(CFPB_test)) {
       CFPB_test[[col]] <- factor(CFPB_test[[col]], levels = levels(CFPB[[col]]))
     }
   }
   
-  # 3. Create sparse matrix using the SAME formula
+  # Creating sparse matrix using the SAME formula
   x_test <- sparse.model.matrix(Relief ~ ., CFPB_test)
   
-  # 4. Verify column names match
+  # Verifying column names match
   stopifnot(all(colnames(x_test) == colnames(x)))
   
-  # 5. Now predict
-  CFPB_predXGB <- predict(xgb_tune, newdata = x_test)
-  confusionMatrix(CFPB_predXGB,reference = CFPB_test$Relief, mode = "everything")
-  
+  # Creating Confusion Matrix for catBoost
   CFPB_predCAT <- predict(cb_tune, newdata = CFPB_test)
   confusionMatrix(CFPB_predCAT,reference = CFPB_test$Relief, mode = "everything")
-  
+}
+  # Measuring impact on older Americans
+  {
   CFPB_old <- CFPB_test|>filter(is_older_american==1)
   CFPB_pred <- predict(cb_tune,newdata = CFPB_old)
   confusionMatrix(CFPB_pred,reference = CFPB_old$Relief, mode = "everything")
-  # 1. Process CFPB_old the same way as training data
+  
+  # Processing CFPB_old the same way as training data
   colnames(CFPB_old) <- make.names(colnames(CFPB_old))
   
-  # 2. Convert character columns to factors
+  # Ensuring character columns are made into factors
   char_cols_old <- sapply(CFPB_old, is.character)
   CFPB_old[char_cols_old] <- lapply(CFPB_old[char_cols_old], as.factor)
   
-  # 3. Align factor levels to match training data
+  # Aligning factor levels to match training data
   for (col in names(CFPB)) {
     if (is.factor(CFPB[[col]]) && col %in% names(CFPB_old)) {
       CFPB_old[[col]] <- factor(CFPB_old[[col]], levels = levels(CFPB[[col]]))
     }
   }
   
-  # 4. Create sparse matrix using the SAME formula
+  # Creating a sparse matrix using the SAME formula
   x_old <- sparse.model.matrix(Relief ~ ., CFPB_old[, c(1:37)])
   
-  # 5. Verify column names match
+  # Verifying column names match
   stopifnot(all(colnames(x_old) == colnames(x)))
   CFPB_predoldxgb <- predict(xgb_tune,newdata = x_old)
   confusionMatrix(CFPB_predoldxgb,reference = CFPB_old$Relief,mode = "everything")
-  
+}
+  # Measuring impact on Black Americans
+  {
+    df2 <- CFPB %>%
+      mutate(
+        majority_black = as.factor(if_else(prop_black > 0.144, 1, 0)),
+        Relief = as.factor(Relief)  # ensure outcome is also a factor
+      ) %>% 
+      filter(majority_black == 1)
+    # Converting df2 into catBoost pool
+    feature_df <- df2 %>% 
+      select(-Relief) %>%
+      mutate(Issue_combined = as.factor(Issue_combined)) 
+    pool_df2 <- catboost.load_pool(data = feature_df)
+    
+    predicted_prob  <- catboost.predict(CBmodel, pool = pool_df2, prediction_type = "Probability")
+    predicted_class <- catboost.predict(CBmodel, pool = pool_df2, prediction_type = "Class")
+    ydf2 <- as.factor(df2$Relief)
+    # Convert predicted_class to a factor with the same levels as your outcome
+    predicted_class_factor <- as.factor(predicted_class)
+    
+    # Make sure levels match
+    levels(predicted_class_factor) <- levels(ydf2)
+    
+    # Now run confusionMatrix with the CLASS predictions, not probabilities
+    caret::confusionMatrix(predicted_class_factor, ydf2)
+    
+    df2 <- CFPB %>%
+      mutate(Relief = as.factor(Relief)) %>%
+      filter(is_older_american == 0)
+    
+    # Convert your new data into a CatBoost Pool
+    feature_df <- df2 %>% 
+      select(-Relief) %>%
+      mutate(Issue_combined = as.factor(Issue_combined))
+    
+    pool_df2 <- catboost.load_pool(data = feature_df)
+    predicted_prob  <- catboost.predict(CBmodel, pool = pool_df2, prediction_type = "Probability")
+    predicted_class <- catboost.predict(CBmodel, pool = pool_df2, prediction_type = "Class")
+    
+    ydf2 <- as.factor(df2$Relief)
+    predicted_class_factor <- as.factor(predicted_class)
+    levels(predicted_class_factor) <- levels(ydf2)
+    caret::confusionMatrix(predicted_class_factor, ydf2)
+  }
+  # Cost of Living Analysis
+  {
+    # 1. PERCENTILE CUTPOINTS
+    q25 <- quantile(CFPB_test$prop_black_fem, 0.25, na.rm = TRUE)
+    q75 <- quantile(CFPB_test$prop_black_fem, 0.75, na.rm = TRUE)
+    
+    # 2. REPRESENTATIVE CONSUMER (median/mode baseline)
+    rep_obs <- CFPB_test[1, ] |>
+      mutate(across(where(is.numeric), ~median(CFPB_test[[cur_column()]], na.rm = TRUE)))
+    
+    # Set categoricals to modal value
+    for (col in names(rep_obs)[sapply(rep_obs, is.factor)]) {
+      rep_obs[[col]] <- names(sort(table(CFPB_test[[col]]), decreasing = TRUE))[1] |> 
+        factor(levels = levels(CFPB_test[[col]]))
+    }
+    
+    # After building rep_obs, force column types to match training data exactly
+    rep_obs$Issue_combined <- factor(
+      rep_obs$Issue_combined, 
+      levels = levels(feature_cols_no_target$Issue_combined)
+    )
+    
+    # Verify
+    class(rep_obs$Issue_combined)
+    
+    # 3. SIMULATE LOW vs HIGH COL SCENARIOS
+    make_pool <- function(obs, col_name, col_val) {
+      obs[[col_name]] <- col_val
+      obs_subset <- obs[, colnames(feature_cols_no_target)]
+      catboost.load_pool(data = obs_subset)
+    }
+    
+    prob_low  <- catboost.predict(CBmodel, make_pool(rep_obs, "prop_black_fem", q25), prediction_type = "Probability")
+    prob_high <- catboost.predict(CBmodel, make_pool(rep_obs, "prop_black_fem", q75), prediction_type = "Probability")
+    
+    # 4. MARGINAL EFFECT
+    abs_change <- (prob_high - prob_low) * 100
+    rel_change <- ((prob_high - prob_low) / prob_low) * 100
+    
+    cat("--- CETERIS PARIBUS FORENSIC AUDIT ---\n")
+    cat("P(Relief | Low COL, 25th pct): ", round(prob_low  * 100, 2), "%\n")
+    cat("P(Relief | High COL, 75th pct):", round(prob_high * 100, 2), "%\n")
+    cat("Absolute Swing:", round(abs_change, 2), "pp\n")
+    cat("Relative Change:", round(rel_change, 2), "%\n")
+    
+    library(kableExtra)
+    
+    data.frame(
+      Scenario       = c("Low COL (25th pct)", "High COL (75th pct)"),
+      COL_Value      = c(round(q25, 2), round(q75, 2)),
+      P_Relief       = c(round(prob_low * 100, 2), round(prob_high * 100, 2)),
+      Abs_Swing_pp   = c("—", round((prob_high - prob_low) * 100, 2)),
+      Rel_Change_pct = c("—", round(((prob_high - prob_low) / prob_low) * 100, 2))
+    ) |>
+      kable(col.names = c("Scenario", "COL Value", "P(Relief) %", "Absolute Swing (pp)", "Relative Change (%)"),
+            align = "lrrrr") |>
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |>
+      row_spec(2, bold = TRUE)
+  }
 }
