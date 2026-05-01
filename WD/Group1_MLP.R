@@ -1,5 +1,6 @@
-setwd("/Users/mattamor/MachineLearningProject_Group1")
-
+setwd("/Users/mattamor/MachineLearningProject_Group1/WD")
+# Installing Packages and Loading Libraries
+{
 install.packages("caret")
 install.packages("randomForest")
 install.packages("rpart.plot")
@@ -28,8 +29,9 @@ pacman::p_load(
   xgboost,
   Matrix,
   data.table,
-  DiagrammeR)
-
+  DiagrammeR,
+  glmnet)
+}
 #1. 
 {
   CFPB0 <- read_csv("sample26.01.csv")
@@ -140,19 +142,6 @@ pacman::p_load(
               'ZIP.state.match',
               'ZIP.char',
               'ZIP.knn.raw'))
-  # Checking that the proportion of unique imputed zip codes are comparable to complete zips 
-  ## Pre-imputation, unique zip codes were 15.8% of the total
-  ## Post-imputation, unique zip codes were 14.4% of total
-  ## Unique imputed zips are more prevalent *among* the imputed list (32.3%), 
-  ## but there is significant overlap with unique zips in the not_imputed list.
-  # imputed <- CFPB2|> filter(imputed==1)
-  # not_imputed <- CFPB2|> filter(imputed==0)  
-  # length(unique(imputed$ZIP.knn))/length(imputed$ZIP.knn)
-  # length(unique(not_imputed$ZIP.knn))/length(not_imputed$ZIP.knn)
-  # length(unique(CFPB2$ZIP.knn))/length(CFPB2$ZIP.knn)
-  # length(unique(imputed$ZIP.knn))     # 2311 unique imputed
-  # length(unique(not_imputed$ZIP.knn)) # 8597 unique complete
-  # length(unique(CFPB2$ZIP.knn))       # 8888 unique total 
 }
 #3.
 {
@@ -193,7 +182,7 @@ pacman::p_load(
 #4.
 {
   # Medical debt
-  med_debt_raw <- read_excel("Question04/changing_med_debt_landscape_county.xlsx", 
+  med_debt_raw <- read_excel("changing_med_debt_landscape_county.xlsx", 
                              sheet = 1,
                              .name_repair = "universal")
   
@@ -245,7 +234,7 @@ pacman::p_load(
 #5.
 {
   #Adding Fed measure for household debt by county 
-  county_debt <- read_csv("Question05/household-debt-by-county.csv")
+  county_debt <- read_csv("household-debt-by-county.csv")
   #Clearing the rows that are not 2020-2025
   #CFPB.household_debt<- make new data frame with this for question 5
   #using the household debt data, cleaning and formatting it from 
@@ -277,9 +266,9 @@ pacman::p_load(
 }
 #6.
 {
-  AutoRetail <- read_excel("Question06/AutoRetail.xlsx")
-  StudentLoan <- read_xlsx("Question06/StudentLoan.xlsx")
-  OverallDebt <- read_xlsx("Question06/Overall.xlsx")
+  AutoRetail <- read_excel("Debt in America County-Level AutoRetail Debt.xlsx")
+  StudentLoan <- read_xlsx("Debt in America County-Level Student Loan Debt.xlsx")
+  OverallDebt <- read_xlsx("Debt in America County-Level Overall Debt.xlsx")
   # Combining all debt data
   DebtMetrics <- OverallDebt |>
     left_join(AutoRetail |> 
@@ -318,10 +307,10 @@ pacman::p_load(
 }
 #7.
 {
-  INSECURE0 <- read_xlsx("Question07/credit-insecurity-index-data-workbook.xlsx", sheet = "County")
+  INSECURE0 <- read_xlsx("credit-insecurity-index-data-workbook.xlsx", sheet = "County")
   tier_lookup <- c(
     "Credit At Risk"  = 1,
-    "Credit Insecure" = 2,   # <-- double-check this
+    "Credit Insecure" = 2,   
     "Mid-Tier"        = 3,
     "Credit Likely"   = 4,
     "Credit Assured"  = 5
@@ -387,26 +376,26 @@ pacman::p_load(
   # Fair Market Rent
   {
   # Importing, cleaning, combining fair market rent data from 
-  FMR22 <- read_xlsx("Question08/FY22_FMRs_revised.xlsx")|>
+  FMR22 <- read_xlsx("FY22_FMRs_revised.xlsx")|>
     rename(fips = fips2010,
            "Studio_2022"    = fmr_0,
            "OneRoom_2022"   = fmr_1,
            "TwoRoom_2022"   = fmr_2,
            "ThreeRoom_2022" = fmr_3,
            "FourRoom_2022"  = fmr_4)
-  FMR23 <- read_xlsx("Question08/FY23_FMRs_revised.xlsx") |>
+  FMR23 <- read_xlsx("FY23_FMRs_revised.xlsx") |>
     rename("Studio_2023"    = fmr_0,
            "OneRoom_2023"   = fmr_1,
            "TwoRoom_2023"   = fmr_2,
            "ThreeRoom_2023" = fmr_3,
            "FourRoom_2023"  = fmr_4)
-  FMR24 <- read_xlsx("Question08/FMR2024_final_revised.xlsx") |>
+  FMR24 <- read_xlsx("FMR2024_final_revised.xlsx") |>
     rename("Studio_2024"    = fmr_0,
            "OneRoom_2024"   = fmr_1,
            "TwoRoom_2024"   = fmr_2,
            "ThreeRoom_2024" = fmr_3,
            "FourRoom_2024"  = fmr_4)
-  FMR25 <- read_xlsx("Question08/FY25_FMRs_revised.xlsx")|>
+  FMR25 <- read_xlsx("FY25_FMRs_revised.xlsx")|>
     rename("Studio_2025"    = fmr_0,
            "OneRoom_2025"   = fmr_1,
            "TwoRoom_2025"   = fmr_2,
@@ -543,10 +532,66 @@ pacman::p_load(
   }
   # Percent 25+ with Bachelor's Degree or Higher
   {
-  compiled_county_education_measures <- read_csv("Question08/compiled_county_education_measures.csv")|>
+    # https://data.census.gov/table?q=S1501:+Educational+Attainment&g=010XX00US$0500000
+    # --- 1. SETUP FILENAMES ---
+    edu_files <- c(
+      "ACSST5Y2020.S1501-Data.csv",
+      "ACSST5Y2021.S1501-Data.csv",
+      "ACSST5Y2022.S1501-Data.csv",
+      "ACSST5Y2023.S1501-Data.csv",
+      "ACSST5Y2024.S1501-Data.csv")
+    
+    # https://www.census.gov/data/tables/time-series/demo/popest/2020s-counties-total.html
+    pop_file <- "co-est2025-alldata.csv"
+    
+    process_edu <- function(file_path) {
+      # Extract year from the file name
+      year_val <- str_extract(file_path, "\\d{4}")
+      
+      # Load data: Skip 2 rows to get to data, then manually apply headers from row 1
+      data <- read_csv(file_path, skip = 2, col_names = FALSE)
+      headers <- names(read_csv(file_path, n_max = 0))
+      colnames(data) <- headers
+      
+      data %>%
+        mutate(
+          fips = str_sub(GEO_ID, -5),
+          year = as.numeric(year_val)
+        ) %>%
+        # S1501_C01_006E: Total Population 25 years and over
+        # S1501_C01_015E: Bachelor's degree or higher
+        select(fips, NAME, year, 
+               total_25plus = S1501_C01_006E, 
+               bach_or_higher = S1501_C01_015E) %>%
+        mutate(pct_bach_degree = (bach_or_higher / total_25plus) * 100)
+    }
+    
+    # COMBINE ---
+    all_edu_data <- map_df(edu_files, process_edu)
+    
+    # --- 4. PROCESS POPULATION DATA (The Bridge) ---
+    # Skip 3 rows: Title, Headers, and the "United States" total row
+    pop_data <- read_csv(pop_file, skip = 3) %>%
+      rename(county_full_name = 1) %>%
+      # Clean the ".Autauga County, Alabama" format to "Autauga County, Alabama"
+      mutate(match_name = str_remove(county_full_name, "^\\.")) 
+    
+    # FINAL JOIN & CLEANUP ---
+    final_compiled_data <- all_edu_data %>%
+      left_join(pop_data, by = c("NAME" = "match_name")) %>%
+      select(fips, NAME, year, total_25plus, bach_or_higher, pct_bach_degree)
+    
+    # --- 6. EXPORT THE RESULT ---
+    # Saves the compiled file to the current working directory
+    output_filename <- "compiled_county_education_measures.csv"
+    write_csv(final_compiled_data, output_filename)
+    
+  compiled_county_education_measures <- read_csv("compiled_county_education_measures.csv")|>
     select(fips,pct_bach_degree,year)|>
     rename(FIPS = fips,
            Year = year)
+  
+  # Final Join for Section 8
   CFPB8 <- CFPB.sahie |>
     left_join(compiled_county_education_measures,by= c("FIPS","Year"))
   }
@@ -619,6 +664,7 @@ pacman::p_load(
   #rm(age_clean, age_vars, all_bps_years, all_bps_years_clean, census_demographics, 
   #  census_features, census_raw, census_scaled, CFPB_Final_Analysis, CFPB_Final_Bias, 
   #  CFPB_with_Permits)
+  gc()
 }
 #10.
 {
@@ -798,7 +844,6 @@ pacman::p_load(
 {
   # Random Forest
   set.seed(12345)
-  sapply(CFPB11, class)
   CFPB.mutate <- CFPB11 %>%
     mutate(across(where(is.character), as.factor),
            across(where(is.logical), as.factor),
@@ -806,10 +851,6 @@ pacman::p_load(
            `CI Index Score`= as.numeric(`CI Index Score`),
            `Not Credit Included` = as.numeric(`Not Credit Included`),
            `Credit Constrained` = as.numeric(`Credit Constrained`))
-  sapply(CFPB.mutate[sapply(CFPB.mutate, is.factor)], nlevels) %>% 
-    sort(decreasing = TRUE) %>% 
-    head(20)
-  # Random Forest won't run when a factor variable has > than 53 levels
   drop_cols_CFPB <- c(
     "ZIP",
     "FIPS",
@@ -819,44 +860,6 @@ pacman::p_load(
   )
   CFPBimpute <- CFPB.mutate[,!names(CFPB.mutate) %in% drop_cols_CFPB]
   CFPBheldout <- CFPB.mutate[,names(CFPB.mutate) %in% drop_cols_CFPB]
-  
-  CFPBimpute$Received <- as.numeric(CFPBimpute$Received)
-  CFPBimpute$Sent <- as.numeric(CFPBimpute$Sent)
-  CFPBimpute$qtr <- as.numeric(CFPBimpute$qtr)
-  #CFPBimpute<- rfImpute(Cust.response~., iter = 5, ntree = 50 ,data=CFPBimpute)
-  sapply(CFPBimpute, class)
-  #for whatever reason these were factors not numeric
-  # cols_to_convert <- c(
-  #   "Share with medical debt in collections",
-  #   "Median medical debt in collections in $2023",
-  #   "Hospital market concentration (HHI)",
-  #   "Number of Closures and Mergers",
-  #   "Share of the population with no health insurance coverage",
-  #   "Share of non-elderly adults with a reported disability",
-  #   "Average household income in $2023",
-  #   "Median medical debt in collections in $2023 - Majority White",
-  #   "Median medical debt in collections in $2023 - Majority of Color",
-  #   "Share with medical debt in collections - Majority White",
-  #   "Share with medical debt in collections - Majority of Color",
-  #   "Median medical debt in collections in $2023"
-  # )
-  # CFPBimpute <- CFPBimpute %>%
-  #   mutate(across(all_of(cols_to_convert), ~ as.numeric(as.character(.x))))
-  #since rfImpute cant impute y and y is what we want to predict in the future I'm going to do a median imputation on y and random forest on everything else
-  #pre_median <- preProcess(CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE], 
-  #method = "medianImpute")
-  #imputedmeddebt <- predict(pre_median, CFPBimpute[, "Median medical debt in collections in $2023", drop = FALSE])
-  #CFPBimpute$`Median medical debt in collections in $2023` <- imputedmeddebt[[1]]
-  #hitting vector ceiling on everything need to take a sample
-  #CFPBimpute <- rfImpute(`Median medical debt in collections in $2023` ~ ., iter = 3, ntree = 20, 
-  #maxnodes = 50, data = CFPBimpute)
-  
-  #CFPBimputed <- missForest(
-  #CFPBimpute,
-  #ntree = 20,
-  #maxiter = 3,
-  #maxnodes = 50
-  #)
   CFPBimpute$Relief <- as.factor(CFPBimpute$Relief)
   na_cols <- names(which(colSums(is.na(CFPBimpute)) > 0))
   set.seed(2345)
@@ -871,17 +874,6 @@ pacman::p_load(
   )
   # Build a random forest on the imputed sample for each NA column,
   # then predict into the full dataset
-  
-  #CODE BELOW WILL HELP FIND MISSING ROWS IN THE EVENT YOU CHANGE THE SEED
-    #for some reason doing this again wyoming was absent so it wouldn't impute without dropping it
-    #levels_in_full   <- levels(droplevels(CFPBimpute_out$state))
-    #levels_in_sample <- levels(droplevels(CFPBsample_imputed$state))
-  
-    #dropped <- setdiff(levels_in_full, levels_in_sample)
-    #cat("States present in full data but absent from training sample:\n")
-    #print(dropped)
-  
-  
   CFPBimpute_out <- CFPBimpute
   
   for (col in na_cols) {
@@ -968,6 +960,9 @@ CFPB <- CFPB12|>
 write_xlsx(CFPB, "CFPB.xlsx")
 saveRDS(CFPB,"CFPB.rds")
 }
+# Removing Objects not needed for the Models
+{rm(list = setdiff(ls(), "CFPB"))
+gc()}
 # Models - Not Chosen
 {
   # Ordinary Least Squares
@@ -975,41 +970,26 @@ saveRDS(CFPB,"CFPB.rds")
     df <- CFPB
     
     # Ensure Relief is treated as numeric
-    df$Relief <- as.numeric(df$Relief)
+    df$Relief <- as.numeric(as.character(df$Relief))
     
-    ols_full <- lm(Relief ~ Year + State + Pub.response + Consent + Submitted.via + 
-                     Timely + Month + Quarter + LessPermits + MorePermits + 
-                     ShareOfPeopleOfColor + CI_score + NotCreditIncluded + 
-                     CreditConstrained + CreditTier + Studio_fmr + OneRoom_fmr + 
-                     TwoRoom_fmr + ThreeRoom_fmr + FourRoom_fmr + Permit_Units + 
-                     Permit_Valuation + PCTUI_PT + pct_bach_degree + is_servicemember + 
-                     is_older_american + prop_young + prop_65plus + prop_female + 
-                     prop_hispanic + prop_black + prop_black_fem + is_older_county + 
-                     cluster + Company + Issue_combined,
+    ols_full <- lm(Relief ~ .,
                    data = df)
     
-    summary(ols_full)
+    # summary(ols_full)
     
     # Prediction for accuracy
     CFPB.test <- CFPB
-    CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
+    CFPB.pred.raw <- predict(ols_full, newdata = CFPB.test)
+    CFPB.pred <- factor(round(CFPB.pred.raw),levels = c("0","1"))
     confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
   }
   # Logit
   {
     df <- CFPB
-    logit_full <- glm(Relief ~ Year + State + Pub.response + Consent + Submitted.via + 
-                        Timely + Month + Quarter + LessPermits + MorePermits + 
-                        ShareOfPeopleOfColor + CI_score + NotCreditIncluded + 
-                        CreditConstrained + CreditTier + Studio_fmr + OneRoom_fmr + 
-                        TwoRoom_fmr + ThreeRoom_fmr + FourRoom_fmr + Permit_Units + 
-                        Permit_Valuation + PCTUI_PT + pct_bach_degree + is_servicemember + 
-                        is_older_american + prop_young + prop_65plus + prop_female + 
-                        prop_hispanic + prop_black + prop_black_fem + is_older_county + 
-                        cluster + Company + Issue_combined,
+    logit_full <- glm(Relief ~ .,
                       data = df,
                       family = binomial(link = "logit"))
-    summary(logit_full)
+    #summary(logit_full)
     
     # Generate predicted probabilities
     fitted_probs <- predict(logit_full, type = "response")
@@ -1022,21 +1002,19 @@ saveRDS(CFPB,"CFPB.rds")
     
     # Accuracy
     accuracy <- mean(predicted_class == actual)
-    cat("Accuracy:", round(accuracy * 100, 2), "%\n")
     
     # Confusion matrix for more detail
     table(Actual = actual, Predicted = predicted_class)
   }
   # Lasso
   {
+    train_data <- CFPB
     # 1. Align and Clean Data (The fix for the TRUE/FALSE error)
     # We create the matrix first; it automatically handles NAs in predictors
     X_dense <- model.matrix(Relief ~ . - 1, data = train_data)
     
     # We subset Y to match the rows that survived in X
     Y_train <- train_data$Relief[as.numeric(rownames(X_dense))]
-    
-    # CRITICAL FIX: Remove any rows where Y is NA (glmnet requirement)
     keep_idx <- !is.na(Y_train)
     X_final  <- Matrix(X_dense[keep_idx, ], sparse = TRUE)
     Y_final  <- Y_train[keep_idx]
@@ -1055,7 +1033,6 @@ saveRDS(CFPB,"CFPB.rds")
     # Output for Part C
     plot(cv_lasso)
     best_coefs <- coef(cv_lasso, s = "lambda.min")
-    print(best_coefs)
     
     # 1. Convert the sparse matrix to a standard data frame
     coef_matrix <- as.matrix(best_coefs)
@@ -1067,17 +1044,14 @@ saveRDS(CFPB,"CFPB.rds")
     # 2. Filter out the zeros (the variables Lasso discarded)
     significant_drivers <- active_variables[active_variables$Coefficient != 0, ]
     
-    # 3. Sort by impact (absolute value)
-    significant_drivers <- significant_drivers[order(-abs(significant_drivers$Coefficient)), ]
-    
-    # 4. View the top drivers
-    head(significant_drivers, 20)
+    # Confusion Matrix
+    CFPB.test <- model.matrix(Relief ~ . - 1, data = CFPB)
+    CFPB.pred.raw <- predict(cv_lasso, newx = CFPB.test, s = "lambda.min", type = "response")
+    CFPB.pred <- factor(round(CFPB.pred.raw),levels = c("0","1"))
+    confusionMatrix(CFPB.pred,reference = CFPB$Relief, mode = "everything")
   }
   # CART
   {
-    library(rpart)
-    library(rpart.plot)
-    
     # 1. UPDATED HYBRID WRAPPING FUNCTION
     # Caps the root at 40 chars, wraps every 12, line-to-line verticality.
     wrap_and_cap <- function(x, labs, digits, varlen, faclen) {
@@ -1093,6 +1067,7 @@ saveRDS(CFPB,"CFPB.rds")
     # 2. RUN MODELS AT THREE RESOLUTIONS
     set.seed(12345)
     
+    train_data_final <- CFPB
     # Resolution A: Executive (Depth 2)
     tree_exec <- rpart(Relief ~ ., data = train_data_final, method = "class",
                        control = rpart.control(cp = 0.01, maxdepth = 2))
@@ -1116,19 +1091,25 @@ saveRDS(CFPB,"CFPB.rds")
     plot_audit(tree_exec, "I. Executive Snapshot (High-Level Filter)")
     plot_audit(tree_inter, "II. Intermediate Summary (Structural Drivers)")
     plot_audit(tree_deep, "III. Deep Forensic Audit (Granular Evidence)")
-  }
+    
+    # Confusion Matrix
+    CFPB.test <- CFPB
+    CFPB.pred <- as.factor(predict(tree_deep, newdata = CFPB.test,type = "class"))
+    confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
+    
+     }
   # Random Forest
   {
-    CFPB0 <- readRDS("CFPB.rds")
+    CFPB <- readRDS("CFPB.rds")
     
     set.seed(124)
-    CFPB <- CFPB0[sample(1:nrow(CFPB0), 20000),]
+    df <- CFPB[sample(1:nrow(CFPB), 20000),]
     
     # Single Random Forest - Commented to avoid rerunning
     ctrl <- trainControl(method = "repeatedcv")
     tunegrid <- expand.grid(.mtry = (10:17))
     CFPB.rf <- train(Relief ~ .,
-                     data = CFPB,
+                     data = df,
                      method = 'rf',
                      metric = 'Accuracy',
                      trControl = ctrl,
@@ -1136,34 +1117,8 @@ saveRDS(CFPB,"CFPB.rds")
                      importance = TRUE,
                      ntree = 500)
     saveRDS(CFPB.rf,"CFPB_rf.rds")
-    CFPB.rf <- readRDS("CFPB_rf.rds")
+    CFPB.rf <- readRDS("RandomForest/CFPB_rf.rds")
     CFPB.rf$finalModel
-    plot(CFPB.rf)
-    CFPB.imp.rf <- varImp(CFPB.rf)
-    CFPB.imp.rf <- CFPB.imp.rf$importance|>rownames_to_column()
-    varImpPlot(CFPB.rf$finalModel)
-    
-    # Importance frame
-    CFPB_importance_frame <- measure_importance(CFPB.rf$finalModel)
-    CFPB_importance_other <- data.frame(importance(CFPB.rf$finalModel)) %>%
-      rownames_to_column(var = "variable")
-    CFPB_importance_frame <- left_join(CFPB_importance_frame, CFPB_importance_other, by = "variable")
-    #write_csv(CFPB_importance_frame,"CFPB_importance_frame.csv")
-    
-    ### Plot multiway importance
-    CFPB_importance_frame %>%
-      select(variable, mean_min_depth, times_a_root) %>%
-      arrange(times_a_root, mean_min_depth) %>%
-      mutate(variable = factor(variable, levels = variable)) %>%  # lock in the order
-      pivot_longer(-variable, names_to = "measure", values_to = "value") %>%
-      ggplot(aes(x = variable, y = value, fill = measure)) +
-      geom_col() +
-      facet_wrap(~ measure, scales = "free_x") +
-      coord_flip() +
-      labs(x = "Variable", y = "Value", title = "Multiway Importance Plot") +
-      theme_bw() +
-      theme(legend.position = "none")
-    
     # Testing model on full dataset
     CFPB.test <- CFPB
     CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
