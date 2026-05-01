@@ -20,8 +20,6 @@ CFPB0 <- readRDS("CFPB.rds")
 
 set.seed(124)
 CFPB <- CFPB0[sample(1:nrow(CFPB0), 20000),]
-CFPB.test <- anti_join(CFPB0,CFPB)
-CFPB.test <- CFPB.test[sample(1:nrow(CFPB.test), 20000),]
   
 # Single Random Forest - Commented to avoid rerunning
 ctrl <- trainControl(method = "repeatedcv")
@@ -34,10 +32,6 @@ CFPB.rf <- train(Relief ~ .,
                tuneGrid = tunegrid,
                importance = TRUE,
                ntree = 500)
-# CFPB.rf <- randomForest(Relief~.,
-#                         data=CFPB,
-#                         ntree = 100,
-#                         importance = TRUE)
 saveRDS(CFPB.rf,"CFPB_rf.rds")
 CFPB.rf <- readRDS("CFPB_rf.rds")
 CFPB.rf$finalModel
@@ -45,7 +39,6 @@ plot(CFPB.rf)
 CFPB.imp.rf <- varImp(CFPB.rf)
 CFPB.imp.rf <- CFPB.imp.rf$importance|>rownames_to_column()
 varImpPlot(CFPB.rf$finalModel)
-
 
 # Importance frame
 CFPB_importance_frame <- measure_importance(CFPB.rf$finalModel)
@@ -68,16 +61,7 @@ CFPB_importance_frame %>%
   theme_bw() +
   theme(legend.position = "none")
 
-# Testing model on test data
+# Testing model on full dataset
 CFPB.test <- readRDS("CFPB.rds")
 CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
 confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
-
-CFPB.old <- CFPB.test|>filter(is_older_american==1)
-
-logit <- readRDS('logit_full.rds')
-summary(logit,)
-plot(logit, which = 1)
-plot(logit,which = 2)
-plot(logit,which = 3)
-plot(logit,which = 5)

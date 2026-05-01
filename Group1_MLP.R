@@ -1,5 +1,11 @@
 setwd("/Users/mattamor/MachineLearningProject_Group1")
 
+install.packages("caret")
+install.packages("randomForest")
+install.packages("rpart.plot")
+install.packages("RANN")
+install.packages("pacman")
+
 pacman::p_load(
   readr,
   readxl,
@@ -13,7 +19,11 @@ pacman::p_load(
   clustMixType,
   censusapi,
   forcats,
-  car)
+  car,
+  rpart,
+  rpart.plot,
+  RANN,
+  randomForestExplainer)
 
 #1. 
 {
@@ -909,7 +919,8 @@ pacman::p_load(
     cbind(CFPB11$Company)|>
     rename(Company = "CFPB11$Company")
 }
-
+# Output
+{
 CFPB <- CFPB12|>
   mutate(
     Issue = as.character(Issue),
@@ -946,3 +957,61 @@ CFPB <- CFPB12|>
 
 write_xlsx(CFPB, "CFPB.xlsx")
 saveRDS(CFPB,"CFPB.rds")
+}
+# Ordinary Least Squares
+{
+  
+}
+# Random Forest Model
+{
+  CFPB0 <- readRDS("CFPB.rds")
+  
+  set.seed(124)
+  CFPB <- CFPB0[sample(1:nrow(CFPB0), 20000),]
+  
+  # Single Random Forest - Commented to avoid rerunning
+  ctrl <- trainControl(method = "repeatedcv")
+  tunegrid <- expand.grid(.mtry = (10:17))
+  CFPB.rf <- train(Relief ~ .,
+                   data = CFPB,
+                   method = 'rf',
+                   metric = 'Accuracy',
+                   trControl = ctrl,
+                   tuneGrid = tunegrid,
+                   importance = TRUE,
+                   ntree = 500)
+  saveRDS(CFPB.rf,"CFPB_rf.rds")
+  CFPB.rf <- readRDS("CFPB_rf.rds")
+  CFPB.rf$finalModel
+  plot(CFPB.rf)
+  CFPB.imp.rf <- varImp(CFPB.rf)
+  CFPB.imp.rf <- CFPB.imp.rf$importance|>rownames_to_column()
+  varImpPlot(CFPB.rf$finalModel)
+  
+  # Importance frame
+  CFPB_importance_frame <- measure_importance(CFPB.rf$finalModel)
+  CFPB_importance_other <- data.frame(importance(CFPB.rf$finalModel)) %>%
+    rownames_to_column(var = "variable")
+  CFPB_importance_frame <- left_join(CFPB_importance_frame, CFPB_importance_other, by = "variable")
+  #write_csv(CFPB_importance_frame,"CFPB_importance_frame.csv")
+  
+  ### Plot multiway importance
+  CFPB_importance_frame %>%
+    select(variable, mean_min_depth, times_a_root) %>%
+    arrange(times_a_root, mean_min_depth) %>%
+    mutate(variable = factor(variable, levels = variable)) %>%  # lock in the order
+    pivot_longer(-variable, names_to = "measure", values_to = "value") %>%
+    ggplot(aes(x = variable, y = value, fill = measure)) +
+    geom_col() +
+    facet_wrap(~ measure, scales = "free_x") +
+    coord_flip() +
+    labs(x = "Variable", y = "Value", title = "Multiway Importance Plot") +
+    theme_bw() +
+    theme(legend.position = "none")
+  
+  # Testing model on full dataset
+  CFPB.test <- readRDS("CFPB.rds")
+  CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
+  confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
+  
+}
