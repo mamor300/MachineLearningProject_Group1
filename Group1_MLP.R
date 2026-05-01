@@ -11,6 +11,7 @@ pacman::p_load(
   readxl,
   writexl,
   tidyverse,
+  ggplot2,
   VIM,
   caret,
   missMDA,
@@ -23,7 +24,11 @@ pacman::p_load(
   rpart,
   rpart.plot,
   RANN,
-  randomForestExplainer)
+  randomForestExplainer,
+  xgboost,
+  Matrix,
+  data.table,
+  DiagrammeR)
 
 #1. 
 {
@@ -958,60 +963,545 @@ CFPB <- CFPB12|>
 write_xlsx(CFPB, "CFPB.xlsx")
 saveRDS(CFPB,"CFPB.rds")
 }
-# Ordinary Least Squares
+# Models - Not Chosen
 {
+  # Ordinary Least Squares
+  {
+    df <- CFPB
+    
+    # Ensure Relief is treated as numeric
+    df$Relief <- as.numeric(df$Relief)
+    
+    ols_full <- lm(Relief ~ Year + State + Pub.response + Consent + Submitted.via + 
+                     Timely + Month + Quarter + LessPermits + MorePermits + 
+                     ShareOfPeopleOfColor + CI_score + NotCreditIncluded + 
+                     CreditConstrained + CreditTier + Studio_fmr + OneRoom_fmr + 
+                     TwoRoom_fmr + ThreeRoom_fmr + FourRoom_fmr + Permit_Units + 
+                     Permit_Valuation + PCTUI_PT + pct_bach_degree + is_servicemember + 
+                     is_older_american + prop_young + prop_65plus + prop_female + 
+                     prop_hispanic + prop_black + prop_black_fem + is_older_county + 
+                     cluster + Company + Issue_combined,
+                   data = df)
+    
+    summary(ols_full)
+    
+    # Prediction for accuracy
+    CFPB.test <- CFPB
+    CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
+    confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
+  }
+  # Logit
+  {
+    df <- CFPB
+    logit_full <- glm(Relief ~ Year + State + Pub.response + Consent + Submitted.via + 
+                        Timely + Month + Quarter + LessPermits + MorePermits + 
+                        ShareOfPeopleOfColor + CI_score + NotCreditIncluded + 
+                        CreditConstrained + CreditTier + Studio_fmr + OneRoom_fmr + 
+                        TwoRoom_fmr + ThreeRoom_fmr + FourRoom_fmr + Permit_Units + 
+                        Permit_Valuation + PCTUI_PT + pct_bach_degree + is_servicemember + 
+                        is_older_american + prop_young + prop_65plus + prop_female + 
+                        prop_hispanic + prop_black + prop_black_fem + is_older_county + 
+                        cluster + Company + Issue_combined,
+                      data = df,
+                      family = binomial(link = "logit"))
+    summary(logit_full)
+    
+    # Generate predicted probabilities
+    fitted_probs <- predict(logit_full, type = "response")
+    
+    # Convert to binary predictions using 0.5 threshold
+    predicted_class <- ifelse(fitted_probs > 0.5, 1, 0)
+    
+    # Actual values
+    actual <- as.numeric(df$Relief) - 1  # converts factor to 0/1
+    
+    # Accuracy
+    accuracy <- mean(predicted_class == actual)
+    cat("Accuracy:", round(accuracy * 100, 2), "%\n")
+    
+    # Confusion matrix for more detail
+    table(Actual = actual, Predicted = predicted_class)
+  }
+  # Lasso
+  {
+    # 1. Align and Clean Data (The fix for the TRUE/FALSE error)
+    # We create the matrix first; it automatically handles NAs in predictors
+    X_dense <- model.matrix(Relief ~ . - 1, data = train_data)
+    
+    # We subset Y to match the rows that survived in X
+    Y_train <- train_data$Relief[as.numeric(rownames(X_dense))]
+    
+    # CRITICAL FIX: Remove any rows where Y is NA (glmnet requirement)
+    keep_idx <- !is.na(Y_train)
+    X_final  <- Matrix(X_dense[keep_idx, ], sparse = TRUE)
+    Y_final  <- Y_train[keep_idx]
+    
+    # 2. LOGISTIC LASSO (Part C)
+    set.seed(12345)
+    cv_lasso <- cv.glmnet(
+      x = X_final, 
+      y = Y_final, 
+      family = "binomial", 
+      alpha = 1,
+      nfolds = 10,
+      type.measure = "auc"
+    )
+    
+    # Output for Part C
+    plot(cv_lasso)
+    best_coefs <- coef(cv_lasso, s = "lambda.min")
+    print(best_coefs)
+    
+    # 1. Convert the sparse matrix to a standard data frame
+    coef_matrix <- as.matrix(best_coefs)
+    active_variables <- data.frame(
+      Variable = rownames(coef_matrix),
+      Coefficient = coef_matrix[,1]
+    )
+    
+    # 2. Filter out the zeros (the variables Lasso discarded)
+    significant_drivers <- active_variables[active_variables$Coefficient != 0, ]
+    
+    # 3. Sort by impact (absolute value)
+    significant_drivers <- significant_drivers[order(-abs(significant_drivers$Coefficient)), ]
+    
+    # 4. View the top drivers
+    head(significant_drivers, 20)
+  }
+  # CART
+  {
+    library(rpart)
+    library(rpart.plot)
+    
+    # 1. UPDATED HYBRID WRAPPING FUNCTION
+    # Caps the root at 40 chars, wraps every 12, line-to-line verticality.
+    wrap_and_cap <- function(x, labs, digits, varlen, faclen) {
+      labs <- sapply(labs, function(l) {
+        if (nchar(l) > 40) {
+          l <- paste0(substr(l, 1, 40), "...")
+        }
+        paste(strwrap(l, width = 12), collapse = "\n")
+      })
+      return(labs)
+    }
+    
+    # 2. RUN MODELS AT THREE RESOLUTIONS
+    set.seed(12345)
+    
+    # Resolution A: Executive (Depth 2)
+    tree_exec <- rpart(Relief ~ ., data = train_data_final, method = "class",
+                       control = rpart.control(cp = 0.01, maxdepth = 2))
+    
+    # Resolution B: Intermediate (Depth 4) - NEW
+    tree_inter <- rpart(Relief ~ ., data = train_data_final, method = "class",
+                        control = rpart.control(cp = 0.005, maxdepth = 4))
+    
+    # Resolution C: Deep Forensic (Depth 6)
+    tree_deep <- rpart(Relief ~ ., data = train_data_final, method = "class",
+                       control = rpart.control(cp = 0.0005, maxdepth = 6))
+    
+    # 3. PLOTTING FUNCTION
+    plot_audit <- function(model, title) {
+      prp(model, extra = 101, box.palette = "RdYlGn", 
+          split.fun = wrap_and_cap, faclen = 0, varlen = 0, 
+          nn = TRUE, main = title)
+    }
+    
+    # Generate the Set
+    plot_audit(tree_exec, "I. Executive Snapshot (High-Level Filter)")
+    plot_audit(tree_inter, "II. Intermediate Summary (Structural Drivers)")
+    plot_audit(tree_deep, "III. Deep Forensic Audit (Granular Evidence)")
+  }
+  # Random Forest
+  {
+    CFPB0 <- readRDS("CFPB.rds")
+    
+    set.seed(124)
+    CFPB <- CFPB0[sample(1:nrow(CFPB0), 20000),]
+    
+    # Single Random Forest - Commented to avoid rerunning
+    ctrl <- trainControl(method = "repeatedcv")
+    tunegrid <- expand.grid(.mtry = (10:17))
+    CFPB.rf <- train(Relief ~ .,
+                     data = CFPB,
+                     method = 'rf',
+                     metric = 'Accuracy',
+                     trControl = ctrl,
+                     tuneGrid = tunegrid,
+                     importance = TRUE,
+                     ntree = 500)
+    saveRDS(CFPB.rf,"CFPB_rf.rds")
+    CFPB.rf <- readRDS("CFPB_rf.rds")
+    CFPB.rf$finalModel
+    plot(CFPB.rf)
+    CFPB.imp.rf <- varImp(CFPB.rf)
+    CFPB.imp.rf <- CFPB.imp.rf$importance|>rownames_to_column()
+    varImpPlot(CFPB.rf$finalModel)
+    
+    # Importance frame
+    CFPB_importance_frame <- measure_importance(CFPB.rf$finalModel)
+    CFPB_importance_other <- data.frame(importance(CFPB.rf$finalModel)) %>%
+      rownames_to_column(var = "variable")
+    CFPB_importance_frame <- left_join(CFPB_importance_frame, CFPB_importance_other, by = "variable")
+    #write_csv(CFPB_importance_frame,"CFPB_importance_frame.csv")
+    
+    ### Plot multiway importance
+    CFPB_importance_frame %>%
+      select(variable, mean_min_depth, times_a_root) %>%
+      arrange(times_a_root, mean_min_depth) %>%
+      mutate(variable = factor(variable, levels = variable)) %>%  # lock in the order
+      pivot_longer(-variable, names_to = "measure", values_to = "value") %>%
+      ggplot(aes(x = variable, y = value, fill = measure)) +
+      geom_col() +
+      facet_wrap(~ measure, scales = "free_x") +
+      coord_flip() +
+      labs(x = "Variable", y = "Value", title = "Multiway Importance Plot") +
+      theme_bw() +
+      theme(legend.position = "none")
+    
+    # Testing model on full dataset
+    CFPB.test <- CFPB
+    CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
+    confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
+  }
+  # xgBoost
+  {
+    #XGBoost model
+    CFPB <- read_excel("CFPB.xlsx")
+    y <- as.numeric(CFPB$Relief)
+    y_factor <- as.factor(CFPB$Relief)
+    #this is removing tags from the xgboost model parameters
+    #I had to do this colnames thing since sparse.model.matrix was giving a name mismatch error
+    colnames(CFPB) <- make.names(colnames(CFPB))
+    x <- sparse.model.matrix(Relief ~ ., CFPB)
+    train_control <- trainControl(method = "cv", number = 5)
+    XGBoostdata <- xgb.DMatrix(data = x, label = y)
+    XGBparams <- list(
+      booster = "gbtree",
+      objective = "binary:logistic",
+      eta = 0.05,
+      max_depth = 6,
+      min_child_weight = 10,
+      max_delta_step = 0,
+      gamma = 0,
+      colsample_bytree = 1,
+      subsample = 0.8,
+      verbosity = 1
+    )
+    set.seed(123)
+    #find optimal number of rounds
+    system.time ({
+      XGBoostCV <- xgb.cv(
+        data = XGBoostdata,
+        params = XGBparams,
+        nrounds = 200,
+        nfold = 5,
+        metrics = "error"
+      )
+    })
+    XGBnrounds <- which.min(XGBoostCV$evaluation_log$test_error_mean)
+    XGBnrounds
+    system.time({
+      XGBmodel <- xgb.train(
+        params = XGBparams,
+        data = XGBoostdata,
+        nrounds = XGBnrounds
+      )
+    })
+    XGBpredictions <- predict(XGBmodel, XGBoostdata)
+    XGBresiduals <- y - XGBpredictions
+    tune_grid <- expand.grid(
+      nrounds = seq(from = 200, to =500, by =50),
+      eta = c(0.05, 0.1, 0.3),
+      max_depth = c(2, 4, 6),
+      gamma = c(0, 0.1, 0.5),
+      colsample_bytree = c(0.5, 0.8, 1),
+      min_child_weight = c(1, 10, 100),
+      subsample = c(0.8, 1)
+      #alpha = (0:2),
+      #lambda = (0:5)
+    )
+    tune_control <- caret::trainControl(
+      method = "cv",
+      number = 3,
+      verboseIter = TRUE, #training log
+      allowParallel = TRUE #FALSE for reproducible results
+    )
+    system.time({xgb_tune <- caret::train(
+      x = x, y = y_factor,
+      trControl = tune_control,
+      tuneGrid = tune_grid,
+      method = "xgbTree",
+      verbose = TRUE
+    )
+    })
+    xgb_tune$bestTune
+    max(xgb_tune$results$Accuracy)
+    qqnorm(XGBresiduals)
+    xgb.plot.tree(model = xgb_tune$finalModel, trees = 1)
+    ### plot
+    #get the first three trees
+    xgb.plot.tree(model = xgb_tune$finalModel, trees = 0:2)
+    xgb.plot.multi.trees(xgb_tune$finalModel)
+    importance_matrix <- xgb.importance(model = xgb_tune$finalModel)
+    xgb.plot.importance(importance_matrix, xlab = "Feature Importance")
+    #accuracy
+    XGBpredictions_class <- ifelse(XGBpredictions > 0.5, 1, 0)
+    accuracy <- mean(XGBpredictions_class == y)
+    #confusion matrix
+    table(XGBpredictions_class, y)
+    caret::confusionMatrix(as.factor(XGBpredictions_class), as.factor(y))
+  }
+  # Neural Net
+  {
+  library(reshape2)
+  library(arrow)
+  library(nnet)
+    install.packages("NeuralNetTools")
+  library(NeuralNetTools)
+  set.seed(27514)
+  char_cols <- sapply(CFPB, is.character)
   
+  if (any(char_cols)) {
+    cat("Converting character columns to factors:", 
+        paste(names(char_cols[char_cols]), collapse = ", "), "\n")
+    CFPB[char_cols] <- lapply(CFPB[char_cols], as.factor)
+  } else {
+    cat("No character columns found.\n")
+  }
+  CFPBnnet <- CFPB
+  CFPBnnet$Relief <- as.factor(CFPBnnet$Relief)
+  #narrows it down to 18 variables
+  #removed month and quarter since neural net needs less variables and I'm keeping year
+  #company was found to be very unimportant
+  CFPBnnet<- CFPBnnet[,-c(4:6, 8:9, 14, 16, 18:21, 27, 34, 36)]
+  #I had previously changed characters up above but if you reimport and change the is.factor to is.character you can run this without needing to run the code above
+  CFPBnnet[sapply(CFPBnnet, is.factor)] <- lapply(CFPBnnet[sapply(CFPBnnet, is.factor)], as.numeric)
+  CFPBnnet <- CFPBnnet %>%
+    rename(
+      Credit_Constrained       = `Credit Constrained`
+    )
+  CFPBnnet$Relief <- as.factor(CFPBnnet$Relief)
+  mm<- model.matrix(~. -1 -Relief, data=CFPBnnet)
+  library(scales)
+  ## rescale all the variables
+  mm2 <- as.data.frame(apply(mm, 2, rescale))
+  mm2$Relief <- CFPBnnet$Relief
+  myControl <- trainControl(## 3-fold CV
+    method = "cv",
+    number = 3)
+  nnGrid <- expand.grid(size = seq(3, 21, 3),
+                        decay = c(0, 0.2, 0.4, 0.8))
+  set.seed(27543)
+  nnetFit <- train(Relief ~ .,
+                   data = mm2,
+                   method = "nnet",
+                   maxit = 1000,
+                   tuneGrid = nnGrid,
+                   trControl = myControl)
+  plotnet(nnetFit)
+  olden(nnetFit) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+  lekprofile(nnetFit)+ theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+  
+  # neural network with 2 hidden nodes
+  #modifying to mimic the one below
+  smp_size1 <- floor(0.75 * nrow(mm2))
+  ## set the seed to make your partition reproducible
+  set.seed(123)
+  train_ind1 <- sample(seq_len(nrow(mm2)), size = smp_size1)
+  
+  ###### set up dataset for lightgbm
+  train1 <- mm2[train_ind1, ]
+  test1  <- mm2[-train_ind1, ]
+  train1$Relief <- as.factor(as.character(train1$Relief))
+  test1$Relief  <- as.factor(as.character(test1$Relief))
+  nn_train1 <- neuralnet(Relief~., data=train1, hidden=c(4), linear.output=F, rep=3, algorithm = "backprop", learningrate = 0.03, err.fct = "ce", stepmax = 1e5)
+  # on test data
+  nn_test1 <- neuralnet(Relief~., data=test1, hidden = c(5),
+                        linear.output = F)
+  plot(nn_train1, rep = "best")
+  set.seed(42132) # set the random seed for reproducibility
+  # Compute fitted values from the training data
+  predictions_train <- predict(nn_train1, newdata = train1)
+  # Test the neural networks out of sample performance
+  predictions_test <- predict(nn_train1, newdata = test1)
+  p.test<-round(predictions_test,0 )
+  cm<- table(p.test, test1[,1])
+  cm
+  pred_classes <- predict(nnetFit, newdata = mm2)
+  confusionMatrix(pred_classes, mm2$Relief)
 }
-# Random Forest Model
+}
+# Model - Chosen
+## catBoost
 {
-  CFPB0 <- readRDS("CFPB.rds")
+  #CATBOOST
+  install.packages('remotes')
+  remotes::install_url('https://github.com/catboost/catboost/releases/download/v1.2.10/catboost-R-windows-x86_64-1.2.10.tgz', INSTALL_opts = c("--no-multiarch", "--no-test-load"))
+  library(catboost)
   
-  set.seed(124)
-  CFPB <- CFPB0[sample(1:nrow(CFPB0), 20000),]
+  # ── Key difference: CatBoost handles categoricals natively ──────────────────
+  # No need for sparse.model.matrix — pass raw data frame directly
+  # Identify categorical feature indices (0-based for CatBoost)
+  CFPB <- readRDS("CFPB.rds")
+  feature_cols <- CFPB[, 1:37]
+  feature_cols_no_target <- feature_cols[, colnames(feature_cols) != "Relief"]
   
-  # Single Random Forest - Commented to avoid rerunning
-  ctrl <- trainControl(method = "repeatedcv")
-  tunegrid <- expand.grid(.mtry = (10:17))
-  CFPB.rf <- train(Relief ~ .,
-                   data = CFPB,
-                   method = 'rf',
-                   metric = 'Accuracy',
-                   trControl = ctrl,
-                   tuneGrid = tunegrid,
-                   importance = TRUE,
-                   ntree = 500)
-  saveRDS(CFPB.rf,"CFPB_rf.rds")
-  CFPB.rf <- readRDS("CFPB_rf.rds")
-  CFPB.rf$finalModel
-  plot(CFPB.rf)
-  CFPB.imp.rf <- varImp(CFPB.rf)
-  CFPB.imp.rf <- CFPB.imp.rf$importance|>rownames_to_column()
-  varImpPlot(CFPB.rf$finalModel)
+  cat_feature_indices <- which(sapply(feature_cols_no_target, is.factor)) - 1  # 0-based
   
-  # Importance frame
-  CFPB_importance_frame <- measure_importance(CFPB.rf$finalModel)
-  CFPB_importance_other <- data.frame(importance(CFPB.rf$finalModel)) %>%
-    rownames_to_column(var = "variable")
-  CFPB_importance_frame <- left_join(CFPB_importance_frame, CFPB_importance_other, by = "variable")
-  #write_csv(CFPB_importance_frame,"CFPB_importance_frame.csv")
+  y_factor <- CFPB$Relief
   
-  ### Plot multiway importance
-  CFPB_importance_frame %>%
-    select(variable, mean_min_depth, times_a_root) %>%
-    arrange(times_a_root, mean_min_depth) %>%
-    mutate(variable = factor(variable, levels = variable)) %>%  # lock in the order
-    pivot_longer(-variable, names_to = "measure", values_to = "value") %>%
-    ggplot(aes(x = variable, y = value, fill = measure)) +
-    geom_col() +
-    facet_wrap(~ measure, scales = "free_x") +
+  # Build CatBoost Pool (equivalent to xgb.DMatrix)
+  CBdata <- catboost.load_pool(
+    data  = feature_cols_no_target,
+    label = y
+  )
+  
+  CBparams <- list(
+    loss_function    = "Logloss",        # binary:logistic equivalent
+    eval_metric      = "Accuracy",
+    learning_rate    = 0.05,             # eta
+    depth            = 6,                # max_depth
+    min_data_in_leaf = 10,               # min_child_weight
+    l2_leaf_reg      = 3,                # regularization (gamma analog)
+    rsm              = 1,                # colsample_bytree
+    subsample        = 0.8,
+    iterations       = 200              # nrounds
+    #verbose          = 50                # print every 50 rounds (verbosity analog)[doesn't work with catboost]
+  )
+  # ── Cross-validation to find optimal iterations ──────────────────────────────
+  set.seed(123)
+  system.time({
+    CBcv <- catboost.cv(
+      pool       = CBdata,
+      params     = CBparams,
+      fold_count = 5,              # nfold
+      type       = "Classical"
+    )
+  })
+  # Find best iteration (lowest test error = highest test accuracy)
+  XGBnrounds <- which.max(CBcv$test.Accuracy.mean)
+  cat("Optimal iterations:", XGBnrounds, "\n")
+  
+  # ── Train final model ────────────────────────────────────────────────────────
+  CBparams$iterations <- XGBnrounds
+  
+  system.time({
+    CBmodel <- catboost.train(
+      learn_pool = CBdata,
+      params     = CBparams
+    )
+  })
+  
+  # ── Predictions ──────────────────────────────────────────────────────────────
+  CBpredictions <- catboost.predict(CBmodel, CBdata, prediction_type = "Probability")
+  CBpredictions_class <- ifelse(CBpredictions > 0.5, 1, 0)
+  CBresiduals <- y - CBpredictions
+  
+  # ── Accuracy & Confusion Matrix ──────────────────────────────────────────────
+  accuracy <- mean(CBpredictions_class == y)
+  table(CBpredictions_class, y)
+  caret::confusionMatrix(as.factor(CBpredictions_class), as.factor(y),mode="everything")
+  
+  # ── QQ plot of residuals ─────────────────────────────────────────────────────
+  qqnorm(CBresiduals)
+  
+  # ── Feature Importance ───────────────────────────────────────────────────────
+  importance <- catboost.get_feature_importance(CBmodel, CBdata)
+  importance_df <- data.frame(
+    Feature    = colnames(feature_cols_no_target),
+    Importance = importance
+  ) |> arrange(desc(Importance))
+  
+  ggplot(importance_df[1:20, ], aes(x = reorder(Feature, Importance), y = Importance)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
     coord_flip() +
-    labs(x = "Variable", y = "Value", title = "Multiway Importance Plot") +
-    theme_bw() +
-    theme(legend.position = "none")
+    labs(title = "CatBoost Feature Importance", x = "Feature", y = "Importance")
   
-  # Testing model on full dataset
-  CFPB.test <- readRDS("CFPB.rds")
-  CFPB.pred <- predict(CFPB.rf, newdata = CFPB.test)
-  confusionMatrix(CFPB.pred,reference = CFPB.test$Relief, mode = "everything")
+  # ── Hyperparameter Tuning via caret ─────────────────────────────────────────
+  # Note: use the catboost caret wrapper
+  tune_grid <- expand.grid(
+    depth            = c(2, 4, 6),
+    learning_rate    = c(0.05, 0.1, 0.3),
+    iterations       = c(200, 350, 500),
+    l2_leaf_reg      = c(1, 3, 5),
+    rsm              = c(0.8, 1),
+    border_count     = 128
+  )
+  
+  tune_control <- caret::trainControl(
+    method       = "cv",
+    number       = 3,
+    verboseIter  = FALSE,
+    allowParallel = FALSE
+  )
+  
+  system.time({
+    cb_tune <- caret::train(
+      x          = feature_cols_no_target,
+      y          = y_factor,
+      method     = catboost.caret,   # built-in caret interface
+      trControl  = tune_control,
+      tuneGrid   = tune_grid#,
+      #verbose    = FALSE
+    )
+  })
+  
+  cb_tune$bestTune
+  max(cb_tune$results$Accuracy)
+  CATBpredictions_class <- ifelse(CBpredictions > 0.5, 1, 0)
+  accuracy <- mean(CBpredictions_class == y)
+
+  table(CBpredictions_class, y)
+  caret::confusionMatrix(as.factor(CBpredictions_class), as.factor(y),mode = "everything")
+  #tests
+  CFPB_test <- readRDS("CFPB_test.rds")
+  # 1. Process CFPB_test the same way as training data
+  colnames(CFPB_test) <- make.names(colnames(CFPB_test))
+  
+  # 2. Align factor levels to match training data
+  for (col in names(CFPB)) {
+    if (is.factor(CFPB[[col]]) && col %in% names(CFPB_test)) {
+      CFPB_test[[col]] <- factor(CFPB_test[[col]], levels = levels(CFPB[[col]]))
+    }
+  }
+  
+  # 3. Create sparse matrix using the SAME formula
+  x_test <- sparse.model.matrix(Relief ~ ., CFPB_test)
+  
+  # 4. Verify column names match
+  stopifnot(all(colnames(x_test) == colnames(x)))
+  
+  # 5. Now predict
+  CFPB_predXGB <- predict(xgb_tune, newdata = x_test)
+  confusionMatrix(CFPB_predXGB,reference = CFPB_test$Relief, mode = "everything")
+  
+  CFPB_predCAT <- predict(cb_tune, newdata = CFPB_test)
+  confusionMatrix(CFPB_predCAT,reference = CFPB_test$Relief, mode = "everything")
+  
+  CFPB_old <- CFPB_test|>filter(is_older_american==1)
+  CFPB_pred <- predict(cb_tune,newdata = CFPB_old)
+  confusionMatrix(CFPB_pred,reference = CFPB_old$Relief, mode = "everything")
+  # 1. Process CFPB_old the same way as training data
+  colnames(CFPB_old) <- make.names(colnames(CFPB_old))
+  
+  # 2. Convert character columns to factors
+  char_cols_old <- sapply(CFPB_old, is.character)
+  CFPB_old[char_cols_old] <- lapply(CFPB_old[char_cols_old], as.factor)
+  
+  # 3. Align factor levels to match training data
+  for (col in names(CFPB)) {
+    if (is.factor(CFPB[[col]]) && col %in% names(CFPB_old)) {
+      CFPB_old[[col]] <- factor(CFPB_old[[col]], levels = levels(CFPB[[col]]))
+    }
+  }
+  
+  # 4. Create sparse matrix using the SAME formula
+  x_old <- sparse.model.matrix(Relief ~ ., CFPB_old[, c(1:37)])
+  
+  # 5. Verify column names match
+  stopifnot(all(colnames(x_old) == colnames(x)))
+  CFPB_predoldxgb <- predict(xgb_tune,newdata = x_old)
+  confusionMatrix(CFPB_predoldxgb,reference = CFPB_old$Relief,mode = "everything")
   
 }
